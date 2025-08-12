@@ -1,0 +1,11 @@
+{
+  "name": "new-releases",
+  "private": true,
+  "type": "commonjs",
+  "dependencies": {
+    "xlsx": "^0.18.5"
+  },
+  "scripts": {
+    "dev": "vercel dev"
+  }
+}

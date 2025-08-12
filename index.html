@@ -1,0 +1,252 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>New Releases — Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1"></script>
+<style>
+  body{margin:0;font-family:system-ui;background:#0f1115;color:#e8ecf1}
+  header{padding:20px;border-bottom:1px solid #222938;background:linear-gradient(180deg,#141823,#0f1115);position:sticky;top:0;z-index:5}
+  h1{margin:0 0 6px;font-size:1.35rem}
+  .controls{display:grid;gap:10px}
+  .row{display:flex;gap:10px;flex-wrap:wrap}
+  .control{display:flex;flex-direction:column;gap:6px;min-width:180px}
+  label{font-size:.85rem;color:#9aa3ad}
+  select,input,button{padding:10px 12px;border:1px solid #222938;border-radius:10px;background:#151922;color:#e8ecf1;outline:none}
+  select:focus,input:focus,button:focus{border-color:#6ea8fe;box-shadow:0 0 0 3px #6ea8fe22}
+  main{max-width:1200px;margin:18px auto;padding:0 16px 40px}
+  .panel{background:#151922;border:1px solid #222938;border-radius:14px;padding:14px;margin-top:12px}
+  .grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+  @media (max-width:1000px){.grid{grid-template-columns:repeat(2,1fr)}}
+  @media (max-width:680px){.grid{grid-template-columns:1fr}}
+  .meta{color:#9aa3ad;font-size:.9rem}
+  .error{color:#ffb3b3;white-space:pre-wrap}
+</style>
+</head>
+<body>
+<header>
+  <h1>New Releases — Charts</h1>
+  <div class="controls">
+    <div class="row">
+      <div class="control">
+        <label for="country">Artist Country (multi-select)</label>
+        <select id="country" multiple size="6" aria-label="Filter by country"></select>
+      </div>
+      <div class="control">
+        <label for="start">Release date (start)</label>
+        <input id="start" type="date">
+      </div>
+      <div class="control">
+        <label for="end">Release date (end)</label>
+        <input id="end" type="date">
+      </div>
+      <div class="control" style="min-width:260px">
+        <label>Status</label>
+        <div id="status" class="meta">Loading…</div>
+      </div>
+    </div>
+  </div>
+</header>
+
+<main>
+  <div class="grid">
+    <div class="panel"><canvas id="chartTopArtists" height="140"></canvas></div>
+    <div class="panel"><canvas id="chartOverTime" height="140"></canvas></div>
+    <div class="panel"><canvas id="chartTopCountries" height="140"></canvas></div>
+  </div>
+</main>
+
+<script>
+const els = {
+  country: document.getElementById('country'),
+  start: document.getElementById('start'),
+  end: document.getElementById('end'),
+  status: document.getElementById('status')
+};
+let releases = [];           // from /api/releases
+let charts = {};             // Chart.js instances
+
+function uniqSorted(a){ return Array.from(new Set(a.filter(Boolean))).sort((x,y)=>x.localeCompare(y)); }
+function selected(sel){ return Array.from(sel.selectedOptions).map(o=>o.value); }
+function year(d){ return new Date(d).getFullYear(); }
+
+async function fetchJSON(url){
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`${res.status} ${res.statusText} @ ${url}`);
+  return res.json();
+}
+
+// -------- load base data --------
+async function loadBase(){
+  els.status.textContent = 'Loading releases…';
+  const url = new URL('/api/releases', location.origin);
+  url.searchParams.set('limit','5000');
+  const data = await fetchJSON(url);
+  releases = data.results || [];
+
+  // Init filters
+  const countries = uniqSorted(releases.map(r=>r.country));
+  els.country.innerHTML = '';
+  for (const c of countries){
+    const o = document.createElement('option'); o.value=c; o.textContent=c; els.country.appendChild(o);
+  }
+  const years = releases.map(r => year(r.date));
+  const minY = Math.min(...years), maxY = Math.max(...years);
+  els.start.value = `${minY}-01-01`;
+  els.end.value   = `${maxY}-12-31`;
+
+  els.status.textContent = `Loaded ${releases.length} releases • ${countries.length} countries`;
+  await updateAll();
+}
+
+// -------- filter helper --------
+function getFiltered(){
+  const countries = selected(els.country).map(v=>v.toLowerCase());
+  const start = els.start.value ? new Date(els.start.value) : null;
+  const end   = els.end.value   ? new Date(els.end.value)   : null;
+
+  return releases.filter(r => {
+    if (countries.length && !countries.includes((r.country||'').toLowerCase())) return false;
+    const d = new Date(r.date);
+    if (start && d < start) return false;
+    if (end   && d > end)   return false;
+    return true;
+  });
+}
+
+// -------- charts (prefer summary files if present) --------
+async function updateAll(){
+  const rows = getFiltered();
+
+  await buildTopArtists(rows);
+  await buildOverTime(rows);
+  await buildTopCountries(rows);
+}
+
+function makeOrUpdateChart(key, ctx, cfg){
+  if (charts[key]) charts[key].destroy();
+  charts[key] = new Chart(ctx, cfg);
+}
+
+// --- Top 5 artists ---
+async function buildTopArtists(rows){
+  // try summary file
+  try {
+    const { results } = await fetchJSON('/api/summary?kind=top-artists');
+    const top = results.slice(0,5);
+    const labels = top.map(r=>r.artist), data = top.map(r=>r.releases);
+    const ctx = document.getElementById('chartTopArtists').getContext('2d');
+    makeOrUpdateChart('artists', ctx, {
+      type:'bar',
+      data:{ labels, datasets:[{ label:'Releases', data }] },
+      options:{ plugins:{ title:{ display:true, text:'Top 5 Artists (from Summary)' }}, scales:{ y:{ beginAtZero:true, ticks:{ precision:0 }}} }
+    });
+    return;
+  } catch (_) { /* fall back */ }
+
+  // compute from filtered rows
+  const counts = {};
+  for (const r of rows) counts[r.artist] = (counts[r.artist]||0)+1;
+  const pairs = Object.entries(counts).sort((a,b)=>b[1]-a[1]).slice(0,5);
+  const labels = pairs.map(p=>p[0]), data = pairs.map(p=>p[1]);
+  const ctx = document.getElementById('chartTopArtists').getContext('2d');
+  makeOrUpdateChart('artists', ctx, {
+    type:'bar',
+    data:{ labels, datasets:[{ label:'Releases', data }] },
+    options:{ plugins:{ title:{ display:true, text:'Top 5 Artists' }}, scales:{ y:{ beginAtZero:true, ticks:{ precision:0 }}} }
+  });
+}
+
+// --- Releases over time by country ---
+async function buildOverTime(rows){
+  try {
+    const { results } = await fetchJSON('/api/summary?kind=country-year');
+    const years = uniqSorted(results.map(r=>String(r.year))).map(Number).sort((a,b)=>a-b);
+    const countries = uniqSorted(results.map(r=>r.country));
+
+    const byKey = new Map(results.map(r => [`${r.year}|${r.country}`, r.releases]));
+    const datasets = countries.map((c,i)=>({
+      label:c,
+      data: years.map(y => byKey.get(`${y}|${c}`) || 0),
+      borderWidth:2, tension:0.25
+    }));
+
+    const ctx = document.getElementById('chartOverTime').getContext('2d');
+    makeOrUpdateChart('overtime', ctx, {
+      type:'line',
+      data:{ labels: years, datasets },
+      options:{ plugins:{ title:{ display:true, text:'Releases Over Time by Country (Summary)' }},
+                interaction:{ mode:'index', intersect:false }, scales:{ y:{ beginAtZero:true, ticks:{ precision:0 }}} }
+    });
+    return;
+  } catch (_) { /* fall back */ }
+
+  // compute from filtered rows
+  const yearsSet = new Set(), countriesSet = new Set(), counts = {};
+  for (const r of rows){
+    const y = new Date(r.date).getFullYear();
+    const c = r.country || 'Unknown';
+    yearsSet.add(y); countriesSet.add(c);
+    counts[`${y}|${c}`] = (counts[`${y}|${c}`] || 0) + 1;
+  }
+  const ys = Array.from(yearsSet).sort((a,b)=>a-b);
+  const cs = Array.from(countriesSet).sort((a,b)=>a.localeCompare(b));
+  const datasets = cs.map(c => ({
+    label:c, data: ys.map(y => counts[`${y}|${c}`] || 0), borderWidth:2, tension:.25
+  }));
+  const ctx = document.getElementById('chartOverTime').getContext('2d');
+  makeOrUpdateChart('overtime', ctx, {
+    type:'line',
+    data:{ labels: ys, datasets },
+    options:{ plugins:{ title:{ display:true, text:'Releases Over Time by Country' }},
+              interaction:{ mode:'index', intersect:false }, scales:{ y:{ beginAtZero:true, ticks:{ precision:0 }}} }
+  });
+}
+
+// --- Top 5 countries ---
+async function buildTopCountries(rows){
+  try {
+    const { results } = await fetchJSON('/api/summary?kind=top-countries');
+    const top = results.slice(0,5);
+    const labels = top.map(r=>r.country), data = top.map(r=>r.releases);
+    const ctx = document.getElementById('chartTopCountries').getContext('2d');
+    makeOrUpdateChart('countries', ctx, {
+      type:'bar',
+      data:{ labels, datasets:[{ label:'Total Releases', data }] },
+      options:{ plugins:{ title:{ display:true, text:'Top 5 Countries (Summary)' }},
+                scales:{ y:{ beginAtZero:true, ticks:{ precision:0 }}} }
+    });
+    return;
+  } catch (_) { /* fall back */ }
+
+  const counts = {};
+  for (const r of rows){
+    const c = r.country || 'Unknown';
+    counts[c] = (counts[c]||0)+1;
+  }
+  const pairs = Object.entries(counts).sort((a,b)=>b[1]-a[1]).slice(0,5);
+  const labels = pairs.map(p=>p[0]), data = pairs.map(p=>p[1]);
+  const ctx = document.getElementById('chartTopCountries').getContext('2d');
+  makeOrUpdateChart('countries', ctx, {
+    type:'bar',
+    data:{ labels, datasets:[{ label:'Total Releases', data }] },
+    options:{ plugins:{ title:{ display:true, text:'Top 5 Countries — All Time' }},
+              scales:{ y:{ beginAtZero:true, ticks:{ precision:0 }}} }
+  });
+}
+
+// Events
+['change','input'].forEach(ev => {
+  els.country.addEventListener('change', updateAll);
+  els.start.addEventListener('change', updateAll);
+  els.end.addEventListener('change', updateAll);
+});
+
+// Boot
+loadBase().catch(e => {
+  els.status.innerHTML = `<span class="error">${String(e.message || e)}</span>`;
+});
+</script>
+</body>
+</html>
