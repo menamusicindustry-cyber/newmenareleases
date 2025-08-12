@@ -82,6 +82,23 @@
       th.country, td.country,
       th.date, td.date { width:auto; }
     }
+    .date-range .date-inputs {
+  display: flex;
+  gap: 6px;
+}
+
+.date-range .date-inputs input {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Desktop: keep them stacked */
+@media (min-width: 681px) {
+  .date-range .date-inputs {
+    flex-direction: column;
+  }
+}
+
   </style>
 </head>
 <body>
@@ -106,14 +123,13 @@
         <label for="country">Artist Country (multi-select)</label>
         <select id="country" multiple size="6" aria-label="Filter by country"></select>
       </div>
-      <div class="control">
-        <label for="start">Release Date (start)</label>
-        <input id="start" type="date">
-      </div>
-      <div class="control">
-        <label for="end">Release Date (end)</label>
-        <input id="end" type="date">
-      </div>
+    <div class="control date-range">
+  <label>Release Date</label>
+  <div class="date-inputs">
+    <input id="start" type="date" aria-label="Release Date start">
+    <input id="end" type="date" aria-label="Release Date end">
+  </div>
+</div>
       <div class="control" style="align-self:flex-end">
         <button id="clear">Clear filters</button>
       </div>
@@ -382,3 +398,4 @@
   </script>
 </body>
 </html>
+
