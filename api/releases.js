@@ -4,16 +4,15 @@ const fs = require('fs');
 const XLSX = require('xlsx');
 
 const COL = {
-  artist: 'Artist Name',
+  artist:  'Artist Name',
   release: 'Release Name',
   country: 'Artist Country',
-  date: 'Release Date'
+  date:    'Release Date'
 };
 
 let CACHE = null, MTIME = 0;
 
 function excelSerialToDate(n){
-  // Excel serial to JS Date (UTC)
   const ms = Math.round((n - 25569) * 86400 * 1000);
   return new Date(ms);
 }
@@ -23,22 +22,21 @@ function toDate(val){
   const t = Date.parse(val);
   return isNaN(t) ? null : new Date(t);
 }
-
 function loadRows(){
   const filePath = path.join(process.cwd(), 'data', 'NewReleases.xlsx');
   const st = fs.statSync(filePath);
   if (CACHE && st.mtimeMs === MTIME) return CACHE;
 
-  const wb = XLSX.read(fs.readFileSync(filePath), { cellDates: true });
+  const wb = XLSX.read(fs.readFileSync(filePath), { cellDates:true });
   const ws = wb.Sheets[wb.SheetNames[0]];
-  const json = XLSX.utils.sheet_to_json(ws, { defval: '' });
+  const json = XLSX.utils.sheet_to_json(ws, { defval:'' });
 
-  const s = v => (v == null ? '' : String(v)).trim();
+  const s = v => (v==null ? '' : String(v)).trim();
   const rows = json.map(r => ({
-    artist: s(r[COL.artist]),
+    artist:  s(r[COL.artist]),
     release: s(r[COL.release]),
     country: s(r[COL.country]),
-    date: toDate(r[COL.date])
+    date:    toDate(r[COL.date])
   })).filter(r => r.artist && r.release && r.date);
 
   CACHE = rows; MTIME = st.mtimeMs;
@@ -53,31 +51,48 @@ module.exports = async (req, res) => {
   try {
     const all = loadRows();
 
-    const countries = []
-      .concat(req.query.country || [])
-      .map(v => String(v).toLowerCase());
+    // ---- filters ----
+    const q = String(req.query.q || '').toLowerCase();
+    const countries = [].concat(req.query.country || []).map(v => String(v).toLowerCase());
     const start = req.query.start ? new Date(String(req.query.start)) : null;
     const end   = req.query.end   ? new Date(String(req.query.end))   : null;
 
-    let out = all.filter(r => {
+    let filtered = all.filter(r => {
+      if (q && !r.artist.toLowerCase().includes(q)) return false;
       if (countries.length && !countries.includes((r.country||'').toLowerCase())) return false;
       if (start && r.date < start) return false;
-      if (end && r.date > end) return false;
+      if (end   && r.date > end)   return false;
       return true;
     });
 
-    // Limit page size
-    const limit = Math.min(parseInt(req.query.limit || '1000', 10) || 1000, 5000);
-    out = out.slice(0, limit);
+    // ---- sorting ----
+    const sortBy  = (req.query.sortBy || 'date');      // 'artist'|'release'|'country'|'date'
+    const sortDir = (req.query.sortDir || 'desc');     // 'asc'|'desc'
+    const cmp = (a, b) => {
+      let va = a[sortBy], vb = b[sortBy];
+      if (sortBy === 'date') { va = a.date.getTime(); vb = b.date.getTime(); }
+      return (va > vb ? 1 : va < vb ? -1 : 0) * (sortDir === 'asc' ? 1 : -1);
+    };
+    filtered.sort(cmp);
 
-    // Return clean fields
+    // ---- pagination ----
+    const total  = filtered.length;
+    const limit  = Math.min(parseInt(req.query.limit || '100', 10) || 100, 1000);
+    const offset = Math.max(parseInt(req.query.offset || '0', 10) || 0, 0);
+    const page   = filtered.slice(offset, offset + limit);
+
     res.json({
-      count: out.length,
-      results: out.map(r => ({
-        artist: r.artist,
+      total,
+      count: page.length,
+      offset,
+      limit,
+      sortBy,
+      sortDir,
+      results: page.map(r => ({
+        artist:  r.artist,
         release: r.release,
         country: r.country,
-        date: r.date.toISOString()
+        date:    r.date.toISOString()
       }))
     });
   } catch (e) {
