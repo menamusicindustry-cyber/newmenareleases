@@ -29,11 +29,17 @@
     .meta{color:var(--muted);font-size:.9rem}
     .error{color:#ffb3b3;white-space:pre-wrap}
 
-    table{width:100%;border-collapse:collapse}
-    th,td{border-bottom:1px solid #1e2432;padding:10px 8px;text-align:left;white-space:nowrap}
+    table{width:100%;border-collapse:collapse;table-layout:fixed}
+    th,td{border-bottom:1px solid #1e2432;padding:10px 8px;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
     th{color:#cbd5e1;font-weight:600;user-select:none;cursor:pointer}
     th .dir{opacity:.8;margin-left:4px}
     tbody tr:hover{background:#161c27}
+
+    /* Column widths + wrapping for Release Name */
+    th.artist, td.artist   { width: 22%; }
+    th.release, td.release { width: 40%; white-space: normal; overflow: visible; word-break: break-word; overflow-wrap: anywhere; }
+    th.country, td.country { width: 18%; }
+    th.date, td.date       { width: 20%; }
 
     .toolbar{display:flex;align-items:center;gap:10px;margin:10px 0}
     .grow{flex:1}
@@ -66,10 +72,7 @@
       <div class="control" style="align-self:flex-end">
         <button id="clear">Clear filters</button>
       </div>
-      <div class="control" style="min-width:320px">
-        <label>Status</label>
-        <div id="status" class="meta">Loading…</div>
-      </div>
+      <!-- Removed the "Status" block per your request -->
     </div>
   </header>
 
@@ -88,10 +91,10 @@
           <table aria-label="Filtered releases">
             <thead>
               <tr id="thead">
-                <th data-key="artist">Artist Name<span class="dir" aria-hidden="true"></span></th>
-                <th data-key="release">Release Name<span class="dir" aria-hidden="true"></span></th>
-                <th data-key="country">Artist Country<span class="dir" aria-hidden="true"></span></th>
-                <th data-key="date">Release Date<span class="dir" aria-hidden="true"></span></th>
+                <th class="artist"  data-key="artist">Artist Name<span class="dir" aria-hidden="true"></span></th>
+                <th class="release" data-key="release">Release Name<span class="dir" aria-hidden="true"></span></th>
+                <th class="country" data-key="country">Artist Country<span class="dir" aria-hidden="true"></span></th>
+                <th class="date"    data-key="date">Release Date<span class="dir" aria-hidden="true"></span></th>
               </tr>
             </thead>
             <tbody id="tbody"></tbody>
@@ -115,7 +118,6 @@
       start: document.getElementById('start'),
       end: document.getElementById('end'),
       clear: document.getElementById('clear'),
-      status: document.getElementById('status'),
       summary: document.getElementById('summary'),
       tbody: document.getElementById('tbody'),
       thead: document.getElementById('thead'),
@@ -156,22 +158,36 @@
       return res.json();
     }
 
-    // -------- initial options (countries + date range) --------
+    // -------- Fetch earliest & latest dates, and countries --------
     async function loadFilterOptions(){
-      const url = new URL('/api/releases', location.origin);
-      url.searchParams.set('limit', '1000');
-      url.searchParams.set('sortBy', 'date');
-      url.searchParams.set('sortDir', 'asc');
-      const { results=[] } = await fetchJSON(url);
-      const countries = uniqSorted(results.map(r=>r.country));
+      // Countries: take a sample to populate options
+      const urlCountries = new URL('/api/releases', location.origin);
+      urlCountries.searchParams.set('limit', '1000');
+      urlCountries.searchParams.set('sortBy', 'date');
+      urlCountries.searchParams.set('sortDir', 'asc');
+      const { results: sample=[] } = await fetchJSON(urlCountries.toString());
+      const countries = uniqSorted(sample.map(r=>r.country));
       els.country.innerHTML='';
-      for(const c of countries){ const o=document.createElement('option'); o.value=c; o.textContent=c; els.country.appendChild(o); }
-      if (results.length){
-        const ys = results.map(r=>new Date(r.date).getFullYear());
-        const minY = Math.min(...ys), maxY = Math.max(...ys);
-        els.start.value = `${minY}-01-01`;
-        els.end.value   = `${maxY}-12-31`;
+      for(const c of countries){
+        const o=document.createElement('option'); o.value=c; o.textContent=c; els.country.appendChild(o);
       }
+
+      // Date bounds: query oldest (asc) and newest (desc), 1 row each
+      const oldestQ = new URL('/api/releases', location.origin);
+      oldestQ.searchParams.set('limit', '1');
+      oldestQ.searchParams.set('sortBy', 'date');
+      oldestQ.searchParams.set('sortDir', 'asc');
+      const newestQ = new URL('/api/releases', location.origin);
+      newestQ.searchParams.set('limit', '1');
+      newestQ.searchParams.set('sortBy', 'date');
+      newestQ.searchParams.set('sortDir', 'desc');
+
+      const [{ results: oldest=[] }, { results: newest=[] }] = await Promise.all([
+        fetchJSON(oldestQ.toString()), fetchJSON(newestQ.toString())
+      ]);
+
+      if (oldest[0]?.date) els.start.value = fmtDate(oldest[0].date);
+      if (newest[0]?.date) els.end.value   = fmtDate(newest[0].date);
     }
 
     function buildQuery(base){
@@ -186,8 +202,6 @@
     }
 
     async function loadPage(){
-      els.status.textContent = 'Loading…';
-
       // 1) Table page (paginated/sorted)
       const qTable = buildQuery('/api/releases');
       qTable.searchParams.set('limit', PAGE_SIZE.toString());
@@ -204,8 +218,6 @@
 
       // 2) Charts (global stats for filters only; ignore page/sort)
       await loadCharts();
-
-      els.status.textContent = '';
     }
 
     function renderStatus(){
@@ -226,10 +238,10 @@
       for (const r of rows){
         const tr = document.createElement('tr');
         tr.innerHTML = `
-          <td>${r.artist || ''}</td>
-          <td>${r.release || ''}</td>
-          <td>${r.country || ''}</td>
-          <td>${fmtDate(r.date)}</td>
+          <td class="artist">${r.artist || ''}</td>
+          <td class="release">${r.release || ''}</td>
+          <td class="country">${r.country || ''}</td>
+          <td class="date">${fmtDate(r.date)}</td>
         `;
         els.tbody.appendChild(tr);
       }
@@ -304,7 +316,7 @@
     els.clear.addEventListener('click', async ()=>{
       els.q.value = '';
       Array.from(els.country.options).forEach(o=>o.selected=false);
-      await loadFilterOptions(); // resets date range
+      await loadFilterOptions(); // resets date range to oldest/newest
       sortBy = 'date'; sortDir = 'desc'; offset = 0;
       loadPage().catch(console.error);
     });
@@ -322,10 +334,11 @@
     // ---------- boot ----------
     (async ()=>{
       try {
-        await loadFilterOptions();
+        await loadFilterOptions(); // sets countries and default (oldest/newest) dates
         await loadPage();
       } catch (e) {
-        els.status.innerHTML = `<span class="error">${String(e.message || e)}</span>`;
+        // Show a small error above the table if needed
+        document.querySelector('.toolbar .meta').textContent = String(e.message || e);
       }
     })();
   </script>
