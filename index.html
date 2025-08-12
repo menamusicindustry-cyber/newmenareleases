@@ -1,214 +1,333 @@
-<script>
-  const els = {
-    q: document.getElementById('q'),
-    country: document.getElementById('country'),
-    start: document.getElementById('start'),
-    end: document.getElementById('end'),
-    clear: document.getElementById('clear'),
-    status: document.getElementById('status'),
-    summary: document.getElementById('summary'),
-    tbody: document.getElementById('tbody'),
-    thead: document.getElementById('thead'),
-    prev: document.getElementById('prev'),
-    next: document.getElementById('next'),
-    chartA: document.getElementById('chartTopArtists'),
-    chartC: document.getElementById('chartTopCountries')
-  };
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>MENA Releases</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <!-- Charts -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1"></script>
+  <style>
+    :root { --bg:#0f1115; --panel:#151922; --text:#e8ecf1; --muted:#9aa3ad; --border:#222938; --accent:#6ea8fe; }
+    *{box-sizing:border-box}
+    body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Inter,Arial,sans-serif;background:var(--bg);color:var(--text)}
+    header{padding:20px;border-bottom:1px solid var(--border);background:linear-gradient(180deg,#141823,#0f1115);position:sticky;top:0;z-index:5}
+    h1{margin:0;font-size:1.6rem}
+    .sub{margin-top:6px;color:var(--muted)}
+    .controls{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px}
+    .control{display:flex;flex-direction:column;gap:6px;min-width:180px}
+    label{font-size:.85rem;color:var(--muted)}
+    input,select,button{padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:var(--panel);color:var(--text);outline:none}
+    input:focus,select:focus,button:focus{border-color:var(--accent);box-shadow:0 0 0 3px #6ea8fe22}
+    button{cursor:pointer}
+    main{max-width:1400px;margin:18px auto;padding:0 16px 40px}
 
-  const PAGE_SIZE = 100;
-  let sortBy = 'date';
-  let sortDir = 'desc';
-  let offset = 0;
-  let total = 0;
+    /* Two-column layout: left = table, right = charts */
+    .layout{display:grid;grid-template-columns:1fr 420px;gap:16px}
+    @media (max-width:1100px){ .layout{grid-template-columns:1fr} }
 
-  let charts = {};
+    .panel{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:14px}
+    .meta{color:var(--muted);font-size:.9rem}
+    .error{color:#ffb3b3;white-space:pre-wrap}
 
-  const uniqSorted = a => Array.from(new Set(a.filter(Boolean))).sort((x,y)=>x.localeCompare(y));
-  const selected = sel => Array.from(sel.selectedOptions).map(o=>o.value);
-  const fmtDate = iso => {
-    const d = new Date(iso); if(isNaN(d)) return '';
-    const y=d.getFullYear(), m=String(d.getMonth()+1).padStart(2,'0'), da=String(d.getDate()).padStart(2,'0');
-    return `${y}-${m}-${da}`;
-  };
-  const comma = n => Number(n).toLocaleString();
-  function statusLine(offset, limit, total){
-    const start = total ? offset + 1 : 0;
-    const end   = Math.min(offset + limit, total);
-    const page  = total ? Math.floor(offset/limit)+1 : 0;
-    const pages = total ? Math.ceil(total/limit) : 0;
-    return `${comma(start)} - ${comma(end)} of ${comma(total)} (Page ${comma(page)} / ${comma(pages)})`;
-  }
+    table{width:100%;border-collapse:collapse}
+    th,td{border-bottom:1px solid #1e2432;padding:10px 8px;text-align:left;white-space:nowrap}
+    th{color:#cbd5e1;font-weight:600;user-select:none;cursor:pointer}
+    th .dir{opacity:.8;margin-left:4px}
+    tbody tr:hover{background:#161c27}
 
-  async function fetchJSON(url){
-    const res = await fetch(url);
-    if (!res.ok) throw new Error(`${res.status} ${res.statusText} @ ${url}`);
-    return res.json();
-  }
+    .toolbar{display:flex;align-items:center;gap:10px;margin:10px 0}
+    .grow{flex:1}
+    .pager{display:flex;gap:8px;align-items:center}
+    .pager button[disabled]{opacity:.5;cursor:not-allowed}
+  </style>
+</head>
+<body>
+  <header>
+    <h1>MENA Releases</h1>
+    <div class="sub">brought to you by <strong>MENAMUSICINDUSTRY</strong> meme page. Data powered by <strong>MusicBrainz</strong>.</div>
 
-  // -------- initial options (countries + date range) --------
-  async function loadFilterOptions(){
-    const url = new URL('/api/releases', location.origin);
-    url.searchParams.set('limit', '1000');
-    url.searchParams.set('sortBy', 'date');
-    url.searchParams.set('sortDir', 'asc');
-    const { results=[] } = await fetchJSON(url);
-    const countries = uniqSorted(results.map(r=>r.country));
-    els.country.innerHTML='';
-    for(const c of countries){ const o=document.createElement('option'); o.value=c; o.textContent=c; els.country.appendChild(o); }
-    if (results.length){
-      const ys = results.map(r=>new Date(r.date).getFullYear());
-      const minY = Math.min(...ys), maxY = Math.max(...ys);
-      els.start.value = `${minY}-01-01`;
-      els.end.value   = `${maxY}-12-31`;
+    <div class="controls">
+      <div class="control" style="min-width:260px;flex:1">
+        <label for="q">Search by Artist Name</label>
+        <input id="q" type="text" placeholder="Type an artist name…">
+      </div>
+      <div class="control">
+        <label for="country">Artist Country (multi-select)</label>
+        <select id="country" multiple size="6" aria-label="Filter by country"></select>
+      </div>
+      <div class="control">
+        <label for="start">Release Date (start)</label>
+        <input id="start" type="date">
+      </div>
+      <div class="control">
+        <label for="end">Release Date (end)</label>
+        <input id="end" type="date">
+      </div>
+      <div class="control" style="align-self:flex-end">
+        <button id="clear">Clear filters</button>
+      </div>
+      <div class="control" style="min-width:320px">
+        <label>Status</label>
+        <div id="status" class="meta">Loading…</div>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <div class="layout">
+      <!-- Left: results table with sorting + pagination -->
+      <div class="panel">
+        <div class="toolbar">
+          <div class="meta grow" id="summary">0 shown</div>
+          <div class="pager">
+            <button id="prev">Prev</button>
+            <button id="next">Next</button>
+          </div>
+        </div>
+        <div style="overflow:auto; max-height:70vh;">
+          <table aria-label="Filtered releases">
+            <thead>
+              <tr id="thead">
+                <th data-key="artist">Artist Name<span class="dir" aria-hidden="true"></span></th>
+                <th data-key="release">Release Name<span class="dir" aria-hidden="true"></span></th>
+                <th data-key="country">Artist Country<span class="dir" aria-hidden="true"></span></th>
+                <th data-key="date">Release Date<span class="dir" aria-hidden="true"></span></th>
+              </tr>
+            </thead>
+            <tbody id="tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Right: charts -->
+      <div style="display:flex; flex-direction:column; gap:16px;">
+        <div class="panel"><canvas id="chartTopArtists" height="160"></canvas></div>
+        <div class="panel"><canvas id="chartTopCountries" height="160"></canvas></div>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    // ---------- state ----------
+    const els = {
+      q: document.getElementById('q'),
+      country: document.getElementById('country'),
+      start: document.getElementById('start'),
+      end: document.getElementById('end'),
+      clear: document.getElementById('clear'),
+      status: document.getElementById('status'),
+      summary: document.getElementById('summary'),
+      tbody: document.getElementById('tbody'),
+      thead: document.getElementById('thead'),
+      prev: document.getElementById('prev'),
+      next: document.getElementById('next'),
+      chartA: document.getElementById('chartTopArtists'),
+      chartC: document.getElementById('chartTopCountries')
+    };
+
+    const PAGE_SIZE = 100;
+    let sortBy = 'date';
+    let sortDir = 'desc';
+    let offset = 0;
+    let total = 0; // total over WHOLE filtered dataset
+
+    let charts = {};
+
+    // ---------- utils ----------
+    const uniqSorted = a => Array.from(new Set(a.filter(Boolean))).sort((x,y)=>x.localeCompare(y));
+    const selected = sel => Array.from(sel.selectedOptions).map(o=>o.value);
+    const fmtDate = iso => {
+      const d = new Date(iso); if(isNaN(d)) return '';
+      const y=d.getFullYear(), m=String(d.getMonth()+1).padStart(2,'0'), da=String(d.getDate()).padStart(2,'0');
+      return `${y}-${m}-${da}`;
+    };
+    const comma = n => Number(n).toLocaleString();
+    function statusLine(offset, limit, total){
+      const start = total ? offset + 1 : 0;
+      const end   = Math.min(offset + limit, total);
+      const page  = total ? Math.floor(offset/limit)+1 : 0;
+      const pages = total ? Math.ceil(total/limit) : 0;
+      return `${comma(start)} - ${comma(end)} of ${comma(total)} (Page ${comma(page)} / ${comma(pages)})`;
     }
-  }
 
-  function buildQuery(base){
-    const u = new URL(base, location.origin);
-    const qv = els.q.value.trim();
-    const cn = selected(els.country);
-    if (qv) u.searchParams.set('q', qv);
-    cn.forEach(c=>u.searchParams.append('country', c));
-    if (els.start.value) u.searchParams.set('start', els.start.value);
-    if (els.end.value)   u.searchParams.set('end',   els.end.value);
-    return u;
-  }
-
-  async function loadPage(){
-    els.status.textContent = 'Loading…';
-    // data for the table (paginated)
-    const qTable = buildQuery('/api/releases');
-    qTable.searchParams.set('limit', PAGE_SIZE.toString());
-    qTable.searchParams.set('offset', offset.toString());
-    qTable.searchParams.set('sortBy', sortBy);
-    qTable.searchParams.set('sortDir', sortDir);
-    const data = await fetchJSON(qTable.toString());
-
-    total = data.total || 0;
-    renderTable(data.results || []);
-    renderStatus(); // uses global total + current offset
-    setPagerButtons();
-    setHeaderIcons();
-
-    // data for the charts (global aggregates for current filters, NOT page)
-    await loadCharts();
-
-    els.status.textContent = '';
-  }
-
-  function renderStatus(){
-    els.summary.textContent = statusLine(offset, PAGE_SIZE, total);
-  }
-  function setPagerButtons(){
-    els.prev.disabled = (offset === 0);
-    els.next.disabled = (offset + PAGE_SIZE >= total);
-  }
-  function setHeaderIcons(){
-    document.querySelectorAll('th[data-key] .dir').forEach(el=>el.textContent='');
-    const th = document.querySelector(`th[data-key="${sortBy}"] .dir`);
-    if (th) th.textContent = sortDir === 'asc' ? '▲' : '▼';
-  }
-
-  function renderTable(rows){
-    els.tbody.innerHTML = '';
-    for (const r of rows){
-      const tr = document.createElement('tr');
-      tr.innerHTML = `
-        <td>${r.artist || ''}</td>
-        <td>${r.release || ''}</td>
-        <td>${r.country || ''}</td>
-        <td>${fmtDate(r.date)}</td>
-      `;
-      els.tbody.appendChild(tr);
+    async function fetchJSON(url){
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`${res.status} ${res.statusText} @ ${url}`);
+      return res.json();
     }
-  }
 
-  function makeOrUpdateChart(key, ctx, config){
-    if (charts[key]) charts[key].destroy();
-    charts[key] = new Chart(ctx, config);
-  }
-
-  async function loadCharts(){
-    // call the global stats endpoint with the SAME filters (no offset/limit)
-    const qStats = buildQuery('/api/release-stats');
-    const { topArtists=[], topCountries=[] } = await fetchJSON(qStats.toString());
-
-    // Top 5 Artist - by Release Count
-    makeOrUpdateChart(
-      'A',
-      els.chartA.getContext('2d'),
-      {
-        type:'bar',
-        data:{
-          labels: topArtists.map(x=>x.label),
-          datasets:[{ label:'Releases', data: topArtists.map(x=>x.count) }]
-        },
-        options:{
-          plugins:{ title:{ display:true, text:'Top 5 Artist - by Release Count' }},
-          scales:{ y:{ beginAtZero:true, ticks:{ precision:0 }}}
-        }
+    // -------- initial options (countries + date range) --------
+    async function loadFilterOptions(){
+      const url = new URL('/api/releases', location.origin);
+      url.searchParams.set('limit', '1000');
+      url.searchParams.set('sortBy', 'date');
+      url.searchParams.set('sortDir', 'asc');
+      const { results=[] } = await fetchJSON(url);
+      const countries = uniqSorted(results.map(r=>r.country));
+      els.country.innerHTML='';
+      for(const c of countries){ const o=document.createElement('option'); o.value=c; o.textContent=c; els.country.appendChild(o); }
+      if (results.length){
+        const ys = results.map(r=>new Date(r.date).getFullYear());
+        const minY = Math.min(...ys), maxY = Math.max(...ys);
+        els.start.value = `${minY}-01-01`;
+        els.end.value   = `${maxY}-12-31`;
       }
-    );
-
-    // Top 5 Countries - by Release Count
-    makeOrUpdateChart(
-      'C',
-      els.chartC.getContext('2d'),
-      {
-        type:'bar',
-        data:{
-          labels: topCountries.map(x=>x.label),
-          datasets:[{ label:'Total Releases', data: topCountries.map(x=>x.count) }]
-        },
-        options:{
-          plugins:{ title:{ display:true, text:'Top 5 Countries - by Release Count' }},
-          scales:{ y:{ beginAtZero:true, ticks:{ precision:0 }}}
-        }
-      }
-    );
-  }
-
-  // ---------- events ----------
-  const debounce = (fn, ms=200) => { let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a), ms); }; };
-
-  // sort on header click
-  els.thead.addEventListener('click', (e)=>{
-    const th = e.target.closest('th[data-key]');
-    if (!th) return;
-    const key = th.getAttribute('data-key');
-    if (sortBy === key){ sortDir = (sortDir === 'asc' ? 'desc' : 'asc'); }
-    else { sortBy = key; sortDir = (key === 'date' ? 'desc' : 'asc'); }
-    offset = 0;
-    loadPage().catch(console.error);
-  });
-
-  // filters (reset to first page + reload page + reload global charts)
-  const onFilter = debounce(()=>{ offset = 0; loadPage().catch(console.error); }, 250);
-  els.q.addEventListener('input', onFilter);
-  els.country.addEventListener('change', onFilter);
-  els.start.addEventListener('change', onFilter);
-  els.end.addEventListener('change', onFilter);
-
-  // clear filters
-  els.clear.addEventListener('click', async ()=>{
-    els.q.value = '';
-    Array.from(els.country.options).forEach(o=>o.selected=false);
-    await loadFilterOptions(); // resets dates to full range
-    sortBy = 'date'; sortDir = 'desc'; offset = 0;
-    loadPage().catch(console.error);
-  });
-
-  // pagination
-  els.prev.addEventListener('click', ()=>{ offset = Math.max(0, offset - PAGE_SIZE); loadPage().catch(console.error); });
-  els.next.addEventListener('click', ()=>{ offset = Math.min(Math.max(0, total - PAGE_SIZE), offset + PAGE_SIZE); loadPage().catch(console.error); });
-
-  // ---------- boot ----------
-  (async ()=>{
-    try {
-      await loadFilterOptions();
-      await loadPage();
-    } catch (e) {
-      els.status.innerHTML = `<span class="error">${String(e.message || e)}</span>`;
     }
-  })();
-</script>
+
+    function buildQuery(base){
+      const u = new URL(base, location.origin);
+      const qv = els.q.value.trim();
+      const cn = selected(els.country);
+      if (qv) u.searchParams.set('q', qv);
+      cn.forEach(c=>u.searchParams.append('country', c));
+      if (els.start.value) u.searchParams.set('start', els.start.value);
+      if (els.end.value)   u.searchParams.set('end',   els.end.value);
+      return u;
+    }
+
+    async function loadPage(){
+      els.status.textContent = 'Loading…';
+
+      // 1) Table page (paginated/sorted)
+      const qTable = buildQuery('/api/releases');
+      qTable.searchParams.set('limit', PAGE_SIZE.toString());
+      qTable.searchParams.set('offset', offset.toString());
+      qTable.searchParams.set('sortBy', sortBy);
+      qTable.searchParams.set('sortDir', sortDir);
+      const data = await fetchJSON(qTable.toString());
+
+      total = data.total || 0; // global filtered total from backend
+      renderTable(data.results || []);
+      renderStatus();
+      setPagerButtons();
+      setHeaderIcons();
+
+      // 2) Charts (global stats for filters only; ignore page/sort)
+      await loadCharts();
+
+      els.status.textContent = '';
+    }
+
+    function renderStatus(){
+      els.summary.textContent = statusLine(offset, PAGE_SIZE, total);
+    }
+    function setPagerButtons(){
+      els.prev.disabled = (offset === 0);
+      els.next.disabled = (offset + PAGE_SIZE >= total);
+    }
+    function setHeaderIcons(){
+      document.querySelectorAll('th[data-key] .dir').forEach(el=>el.textContent='');
+      const th = document.querySelector(`th[data-key="${sortBy}"] .dir`);
+      if (th) th.textContent = sortDir === 'asc' ? '▲' : '▼';
+    }
+
+    function renderTable(rows){
+      els.tbody.innerHTML = '';
+      for (const r of rows){
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${r.artist || ''}</td>
+          <td>${r.release || ''}</td>
+          <td>${r.country || ''}</td>
+          <td>${fmtDate(r.date)}</td>
+        `;
+        els.tbody.appendChild(tr);
+      }
+    }
+
+    function makeOrUpdateChart(key, ctx, config){
+      if (charts[key]) charts[key].destroy();
+      charts[key] = new Chart(ctx, config);
+    }
+
+    async function loadCharts(){
+      const qStats = buildQuery('/api/release-stats'); // SAME FILTERS, no pagination
+      const { topArtists=[], topCountries=[] } = await fetchJSON(qStats.toString());
+
+      // Top 5 Artist - by Release Count
+      makeOrUpdateChart(
+        'A',
+        els.chartA.getContext('2d'),
+        {
+          type:'bar',
+          data:{
+            labels: topArtists.map(x=>x.label),
+            datasets:[{ label:'Releases', data: topArtists.map(x=>x.count) }]
+          },
+          options:{
+            plugins:{ title:{ display:true, text:'Top 5 Artist - by Release Count' }},
+            scales:{ y:{ beginAtZero:true, ticks:{ precision:0 }}}
+          }
+        }
+      );
+
+      // Top 5 Countries - by Release Count
+      makeOrUpdateChart(
+        'C',
+        els.chartC.getContext('2d'),
+        {
+          type:'bar',
+          data:{
+            labels: topCountries.map(x=>x.label),
+            datasets:[{ label:'Total Releases', data: topCountries.map(x=>x.count) }]
+          },
+          options:{
+            plugins:{ title:{ display:true, text:'Top 5 Countries - by Release Count' }},
+            scales:{ y:{ beginAtZero:true, ticks:{ precision:0 }}}
+          }
+        }
+      );
+    }
+
+    // ---------- events ----------
+    const debounce = (fn, ms=200) => { let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a), ms); }; };
+
+    // sort on header click
+    els.thead.addEventListener('click', (e)=>{
+      const th = e.target.closest('th[data-key]');
+      if (!th) return;
+      const key = th.getAttribute('data-key');
+      if (sortBy === key){ sortDir = (sortDir === 'asc' ? 'desc' : 'asc'); }
+      else { sortBy = key; sortDir = (key === 'date' ? 'desc' : 'asc'); }
+      offset = 0;
+      loadPage().catch(console.error);
+    });
+
+    // filters (reset to first page + reload page + reload global charts)
+    const onFilter = debounce(()=>{ offset = 0; loadPage().catch(console.error); }, 250);
+    els.q.addEventListener('input', onFilter);
+    els.country.addEventListener('change', onFilter);
+    els.start.addEventListener('change', onFilter);
+    els.end.addEventListener('change', onFilter);
+
+    // clear filters
+    els.clear.addEventListener('click', async ()=>{
+      els.q.value = '';
+      Array.from(els.country.options).forEach(o=>o.selected=false);
+      await loadFilterOptions(); // resets date range
+      sortBy = 'date'; sortDir = 'desc'; offset = 0;
+      loadPage().catch(console.error);
+    });
+
+    // pagination
+    els.prev.addEventListener('click', ()=>{
+      offset = Math.max(0, offset - PAGE_SIZE);
+      loadPage().catch(console.error);
+    });
+    els.next.addEventListener('click', ()=>{
+      offset = Math.min(Math.max(0, total - PAGE_SIZE), offset + PAGE_SIZE);
+      loadPage().catch(console.error);
+    });
+
+    // ---------- boot ----------
+    (async ()=>{
+      try {
+        await loadFilterOptions();
+        await loadPage();
+      } catch (e) {
+        els.status.innerHTML = `<span class="error">${String(e.message || e)}</span>`;
+      }
+    })();
+  </script>
+</body>
+</html>
