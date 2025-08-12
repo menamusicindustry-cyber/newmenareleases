@@ -1,252 +1,275 @@
 <!doctype html>
 <html lang="en">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>New Releases — Dashboard</title>
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1"></script>
-<style>
-  body{margin:0;font-family:system-ui;background:#0f1115;color:#e8ecf1}
-  header{padding:20px;border-bottom:1px solid #222938;background:linear-gradient(180deg,#141823,#0f1115);position:sticky;top:0;z-index:5}
-  h1{margin:0 0 6px;font-size:1.35rem}
-  .controls{display:grid;gap:10px}
-  .row{display:flex;gap:10px;flex-wrap:wrap}
-  .control{display:flex;flex-direction:column;gap:6px;min-width:180px}
-  label{font-size:.85rem;color:#9aa3ad}
-  select,input,button{padding:10px 12px;border:1px solid #222938;border-radius:10px;background:#151922;color:#e8ecf1;outline:none}
-  select:focus,input:focus,button:focus{border-color:#6ea8fe;box-shadow:0 0 0 3px #6ea8fe22}
-  main{max-width:1200px;margin:18px auto;padding:0 16px 40px}
-  .panel{background:#151922;border:1px solid #222938;border-radius:14px;padding:14px;margin-top:12px}
-  .grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
-  @media (max-width:1000px){.grid{grid-template-columns:repeat(2,1fr)}}
-  @media (max-width:680px){.grid{grid-template-columns:1fr}}
-  .meta{color:#9aa3ad;font-size:.9rem}
-  .error{color:#ffb3b3;white-space:pre-wrap}
-</style>
+  <meta charset="utf-8" />
+  <title>MENA Releases</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1"></script>
+  <style>
+    :root { --bg:#0f1115; --panel:#151922; --text:#e8ecf1; --muted:#9aa3ad; --border:#222938; --accent:#6ea8fe; }
+    *{box-sizing:border-box}
+    body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Inter,Arial,sans-serif;background:var(--bg);color:var(--text)}
+    header{padding:20px;border-bottom:1px solid var(--border);background:linear-gradient(180deg,#141823,#0f1115);position:sticky;top:0;z-index:5}
+    h1{margin:0;font-size:1.6rem}
+    .sub{margin-top:6px;color:var(--muted)}
+    .controls{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px}
+    .control{display:flex;flex-direction:column;gap:6px;min-width:180px}
+    label{font-size:.85rem;color:var(--muted)}
+    input,select,button{padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:var(--panel);color:var(--text);outline:none}
+    input:focus,select:focus,button:focus{border-color:var(--accent);box-shadow:0 0 0 3px #6ea8fe22}
+    button{cursor:pointer}
+    main{max-width:1400px;margin:18px auto;padding:0 16px 40px}
+
+    /* Two-column layout: left = filters + table, right = charts */
+    .layout{display:grid;grid-template-columns:1fr 420px;gap:16px}
+    @media (max-width:1100px){ .layout{grid-template-columns:1fr} }
+
+    .panel{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:14px}
+    .meta{color:var(--muted);font-size:.9rem}
+    .error{color:#ffb3b3;white-space:pre-wrap}
+
+    table{width:100%;border-collapse:collapse}
+    th,td{border-bottom:1px solid #1e2432;padding:10px 8px;text-align:left}
+    th{color:#cbd5e1;font-weight:600}
+    tbody tr:hover{background:#161c27}
+    .toolbar{display:flex;align-items:center;gap:10px;margin:10px 0}
+    .grow{flex:1}
+  </style>
 </head>
 <body>
-<header>
-  <h1>New Releases — Charts</h1>
-  <div class="controls">
-    <div class="row">
+  <header>
+    <h1>MENA Releases</h1>
+    <div class="sub">brought to you by <strong>MENAMUSICINDUSTRY</strong> meme page. Data powered by <strong>MusicBrainz</strong>.</div>
+
+    <div class="controls">
+      <div class="control" style="min-width:260px;flex:1">
+        <label for="q">Search by Artist Name</label>
+        <input id="q" type="text" placeholder="Type an artist name…">
+      </div>
       <div class="control">
         <label for="country">Artist Country (multi-select)</label>
         <select id="country" multiple size="6" aria-label="Filter by country"></select>
       </div>
       <div class="control">
-        <label for="start">Release date (start)</label>
+        <label for="start">Release Date (start)</label>
         <input id="start" type="date">
       </div>
       <div class="control">
-        <label for="end">Release date (end)</label>
+        <label for="end">Release Date (end)</label>
         <input id="end" type="date">
       </div>
-      <div class="control" style="min-width:260px">
+      <div class="control" style="align-self:flex-end">
+        <button id="clear">Clear filters</button>
+      </div>
+      <div class="control" style="min-width:280px">
         <label>Status</label>
         <div id="status" class="meta">Loading…</div>
       </div>
     </div>
-  </div>
-</header>
+  </header>
 
-<main>
-  <div class="grid">
-    <div class="panel"><canvas id="chartTopArtists" height="140"></canvas></div>
-    <div class="panel"><canvas id="chartOverTime" height="140"></canvas></div>
-    <div class="panel"><canvas id="chartTopCountries" height="140"></canvas></div>
-  </div>
-</main>
+  <main>
+    <div class="layout">
+      <!-- Left: results table -->
+      <div class="panel">
+        <div class="toolbar">
+          <div class="meta grow" id="summary">0 shown</div>
+        </div>
+        <div style="overflow:auto; max-height:70vh;">
+          <table aria-label="Filtered releases">
+            <thead>
+              <tr>
+                <th>Artist Name</th>
+                <th>Release Name</th>
+                <th>Artist Country</th>
+                <th>Release Date</th>
+              </tr>
+            </thead>
+            <tbody id="tbody">
+              <!-- rows go here -->
+            </tbody>
+          </table>
+        </div>
+      </div>
 
-<script>
-const els = {
-  country: document.getElementById('country'),
-  start: document.getElementById('start'),
-  end: document.getElementById('end'),
-  status: document.getElementById('status')
-};
-let releases = [];           // from /api/releases
-let charts = {};             // Chart.js instances
+      <!-- Right: charts stacked -->
+      <div style="display:flex; flex-direction:column; gap:16px;">
+        <div class="panel">
+          <canvas id="chartTopArtists" height="160"></canvas>
+        </div>
+        <div class="panel">
+          <canvas id="chartTopCountries" height="160"></canvas>
+        </div>
+      </div>
+    </div>
+  </main>
 
-function uniqSorted(a){ return Array.from(new Set(a.filter(Boolean))).sort((x,y)=>x.localeCompare(y)); }
-function selected(sel){ return Array.from(sel.selectedOptions).map(o=>o.value); }
-function year(d){ return new Date(d).getFullYear(); }
+  <script>
+    // Frontend assumes you have the backend endpoint /api/releases from the previous steps.
+    const els = {
+      q: document.getElementById('q'),
+      country: document.getElementById('country'),
+      start: document.getElementById('start'),
+      end: document.getElementById('end'),
+      clear: document.getElementById('clear'),
+      status: document.getElementById('status'),
+      tbody: document.getElementById('tbody'),
+      summary: document.getElementById('summary')
+    };
 
-async function fetchJSON(url){
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`${res.status} ${res.statusText} @ ${url}`);
-  return res.json();
-}
+    let allReleases = []; // cached (unfiltered) after initial load
+    let charts = {};
 
-// -------- load base data --------
-async function loadBase(){
-  els.status.textContent = 'Loading releases…';
-  const url = new URL('/api/releases', location.origin);
-  url.searchParams.set('limit','5000');
-  const data = await fetchJSON(url);
-  releases = data.results || [];
+    const uniqSorted = a => Array.from(new Set(a.filter(Boolean))).sort((x,y)=>x.localeCompare(y));
+    const selected = sel => Array.from(sel.selectedOptions).map(o=>o.value);
+    const fmtDate = iso => {
+      const d = new Date(iso);
+      if (isNaN(d)) return '';
+      const y=d.getFullYear(), m=String(d.getMonth()+1).padStart(2,'0'), da=String(d.getDate()).padStart(2,'0');
+      return `${y}-${m}-${da}`;
+    };
 
-  // Init filters
-  const countries = uniqSorted(releases.map(r=>r.country));
-  els.country.innerHTML = '';
-  for (const c of countries){
-    const o = document.createElement('option'); o.value=c; o.textContent=c; els.country.appendChild(o);
-  }
-  const years = releases.map(r => year(r.date));
-  const minY = Math.min(...years), maxY = Math.max(...years);
-  els.start.value = `${minY}-01-01`;
-  els.end.value   = `${maxY}-12-31`;
+    async function fetchJSON(url){
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`${res.status} ${res.statusText} @ ${url}`);
+      return res.json();
+    }
 
-  els.status.textContent = `Loaded ${releases.length} releases • ${countries.length} countries`;
-  await updateAll();
-}
+    // Load once to populate filters (full extent)
+    async function loadInitial(){
+      els.status.textContent = 'Loading…';
+      const url = new URL('/api/releases', location.origin);
+      url.searchParams.set('limit', '5000');
+      const data = await fetchJSON(url);
+      allReleases = data.results || [];
 
-// -------- filter helper --------
-function getFiltered(){
-  const countries = selected(els.country).map(v=>v.toLowerCase());
-  const start = els.start.value ? new Date(els.start.value) : null;
-  const end   = els.end.value   ? new Date(els.end.value)   : null;
+      // Country options
+      const countries = uniqSorted(allReleases.map(r=>r.country));
+      els.country.innerHTML = '';
+      for (const c of countries){
+        const o = document.createElement('option'); o.value=c; o.textContent=c; els.country.appendChild(o);
+      }
+      // Date defaults
+      const years = allReleases.map(r => new Date(r.date).getFullYear());
+      const minY = Math.min(...years), maxY = Math.max(...years);
+      els.start.value = `${minY}-01-01`;
+      els.end.value   = `${maxY}-12-31`;
 
-  return releases.filter(r => {
-    if (countries.length && !countries.includes((r.country||'').toLowerCase())) return false;
-    const d = new Date(r.date);
-    if (start && d < start) return false;
-    if (end   && d > end)   return false;
-    return true;
-  });
-}
+      els.status.textContent = `Loaded ${allReleases.length} releases • ${countries.length} countries`;
+      await applyFilters(); // initial render
+    }
 
-// -------- charts (prefer summary files if present) --------
-async function updateAll(){
-  const rows = getFiltered();
+    function buildQuery(){
+      const q = new URL('/api/releases', location.origin);
+      const name = els.q.value.trim();
+      const countries = selected(els.country);
+      const start = els.start.value;
+      const end = els.end.value;
 
-  await buildTopArtists(rows);
-  await buildOverTime(rows);
-  await buildTopCountries(rows);
-}
+      if (name) q.searchParams.set('q', name);
+      countries.forEach(c => q.searchParams.append('country', c));
+      if (start) q.searchParams.set('start', start);
+      if (end) q.searchParams.set('end', end);
+      q.searchParams.set('limit', '1000');
+      return q.toString();
+    }
 
-function makeOrUpdateChart(key, ctx, cfg){
-  if (charts[key]) charts[key].destroy();
-  charts[key] = new Chart(ctx, cfg);
-}
+    async function applyFilters(){
+      try{
+        els.status.textContent = 'Updating…';
+        const data = await fetchJSON(buildQuery());
+        const rows = (data.results || []).sort((a,b)=> (a.artist||'').localeCompare(b.artist||''));
+        renderTable(rows);
+        buildCharts(rows);
+        els.status.textContent = `Showing ${rows.length} of ${allReleases.length} releases`;
+      }catch(err){
+        els.status.innerHTML = `<span class="error">${String(err.message || err)}</span>`;
+        console.error(err);
+      }
+    }
 
-// --- Top 5 artists ---
-async function buildTopArtists(rows){
-  // try summary file
-  try {
-    const { results } = await fetchJSON('/api/summary?kind=top-artists');
-    const top = results.slice(0,5);
-    const labels = top.map(r=>r.artist), data = top.map(r=>r.releases);
-    const ctx = document.getElementById('chartTopArtists').getContext('2d');
-    makeOrUpdateChart('artists', ctx, {
-      type:'bar',
-      data:{ labels, datasets:[{ label:'Releases', data }] },
-      options:{ plugins:{ title:{ display:true, text:'Top 5 Artists (from Summary)' }}, scales:{ y:{ beginAtZero:true, ticks:{ precision:0 }}} }
+    function renderTable(rows){
+      els.tbody.innerHTML = '';
+      for (const r of rows){
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${r.artist || ''}</td>
+          <td>${r.release || ''}</td>
+          <td>${r.country || ''}</td>
+          <td>${fmtDate(r.date)}</td>
+        `;
+        els.tbody.appendChild(tr);
+      }
+      els.summary.textContent = `${rows.length} shown`;
+    }
+
+    function makeOrUpdateChart(key, ctx, config){
+      if (charts[key]) charts[key].destroy();
+      charts[key] = new Chart(ctx, config);
+    }
+
+    function buildCharts(rows){
+      // Top 5 Artist – by Release Count
+      const byArtist = {};
+      for (const r of rows) byArtist[r.artist] = (byArtist[r.artist]||0) + 1;
+      const topArtists = Object.entries(byArtist).sort((a,b)=>b[1]-a[1]).slice(0,5);
+      const aLabels = topArtists.map(x=>x[0]);
+      const aData   = topArtists.map(x=>x[1]);
+
+      makeOrUpdateChart('topArtists',
+        document.getElementById('chartTopArtists').getContext('2d'),
+        {
+          type:'bar',
+          data:{ labels:aLabels, datasets:[{ label:'Releases', data:aData }] },
+          options:{
+            plugins:{ title:{ display:true, text:'Top 5 Artist - by Release Count' }},
+            scales:{ y:{ beginAtZero:true, ticks:{ precision:0 }}}
+          }
+        }
+      );
+
+      // Top 5 Countries – by Release Count
+      const byCountry = {};
+      for (const r of rows){
+        const c = r.country || 'Unknown';
+        byCountry[c] = (byCountry[c]||0) + 1;
+      }
+      const topCountries = Object.entries(byCountry).sort((a,b)=>b[1]-a[1]).slice(0,5);
+      const cLabels = topCountries.map(x=>x[0]);
+      const cData   = topCountries.map(x=>x[1]);
+
+      makeOrUpdateChart('topCountries',
+        document.getElementById('chartTopCountries').getContext('2d'),
+        {
+          type:'bar',
+          data:{ labels:cLabels, datasets:[{ label:'Total Releases', data:cData }] },
+          options:{
+            plugins:{ title:{ display:true, text:'Top 5 Countries - by Release Count' }},
+            scales:{ y:{ beginAtZero:true, ticks:{ precision:0 }}}
+          }
+        }
+      );
+    }
+
+    // Events
+    const debounce = (fn, ms=160) => { let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a), ms); }; };
+    els.q.addEventListener('input', debounce(applyFilters, 200));
+    els.country.addEventListener('change', applyFilters);
+    els.start.addEventListener('change', applyFilters);
+    els.end.addEventListener('change', applyFilters);
+    els.clear.addEventListener('click', async ()=>{
+      els.q.value = '';
+      Array.from(els.country.options).forEach(o => o.selected = false);
+      // Reset dates to full range
+      const years = allReleases.map(r => new Date(r.date).getFullYear());
+      const minY = Math.min(...years), maxY = Math.max(...years);
+      els.start.value = `${minY}-01-01`;
+      els.end.value   = `${maxY}-12-31`;
+      await applyFilters();
     });
-    return;
-  } catch (_) { /* fall back */ }
 
-  // compute from filtered rows
-  const counts = {};
-  for (const r of rows) counts[r.artist] = (counts[r.artist]||0)+1;
-  const pairs = Object.entries(counts).sort((a,b)=>b[1]-a[1]).slice(0,5);
-  const labels = pairs.map(p=>p[0]), data = pairs.map(p=>p[1]);
-  const ctx = document.getElementById('chartTopArtists').getContext('2d');
-  makeOrUpdateChart('artists', ctx, {
-    type:'bar',
-    data:{ labels, datasets:[{ label:'Releases', data }] },
-    options:{ plugins:{ title:{ display:true, text:'Top 5 Artists' }}, scales:{ y:{ beginAtZero:true, ticks:{ precision:0 }}} }
-  });
-}
-
-// --- Releases over time by country ---
-async function buildOverTime(rows){
-  try {
-    const { results } = await fetchJSON('/api/summary?kind=country-year');
-    const years = uniqSorted(results.map(r=>String(r.year))).map(Number).sort((a,b)=>a-b);
-    const countries = uniqSorted(results.map(r=>r.country));
-
-    const byKey = new Map(results.map(r => [`${r.year}|${r.country}`, r.releases]));
-    const datasets = countries.map((c,i)=>({
-      label:c,
-      data: years.map(y => byKey.get(`${y}|${c}`) || 0),
-      borderWidth:2, tension:0.25
-    }));
-
-    const ctx = document.getElementById('chartOverTime').getContext('2d');
-    makeOrUpdateChart('overtime', ctx, {
-      type:'line',
-      data:{ labels: years, datasets },
-      options:{ plugins:{ title:{ display:true, text:'Releases Over Time by Country (Summary)' }},
-                interaction:{ mode:'index', intersect:false }, scales:{ y:{ beginAtZero:true, ticks:{ precision:0 }}} }
-    });
-    return;
-  } catch (_) { /* fall back */ }
-
-  // compute from filtered rows
-  const yearsSet = new Set(), countriesSet = new Set(), counts = {};
-  for (const r of rows){
-    const y = new Date(r.date).getFullYear();
-    const c = r.country || 'Unknown';
-    yearsSet.add(y); countriesSet.add(c);
-    counts[`${y}|${c}`] = (counts[`${y}|${c}`] || 0) + 1;
-  }
-  const ys = Array.from(yearsSet).sort((a,b)=>a-b);
-  const cs = Array.from(countriesSet).sort((a,b)=>a.localeCompare(b));
-  const datasets = cs.map(c => ({
-    label:c, data: ys.map(y => counts[`${y}|${c}`] || 0), borderWidth:2, tension:.25
-  }));
-  const ctx = document.getElementById('chartOverTime').getContext('2d');
-  makeOrUpdateChart('overtime', ctx, {
-    type:'line',
-    data:{ labels: ys, datasets },
-    options:{ plugins:{ title:{ display:true, text:'Releases Over Time by Country' }},
-              interaction:{ mode:'index', intersect:false }, scales:{ y:{ beginAtZero:true, ticks:{ precision:0 }}} }
-  });
-}
-
-// --- Top 5 countries ---
-async function buildTopCountries(rows){
-  try {
-    const { results } = await fetchJSON('/api/summary?kind=top-countries');
-    const top = results.slice(0,5);
-    const labels = top.map(r=>r.country), data = top.map(r=>r.releases);
-    const ctx = document.getElementById('chartTopCountries').getContext('2d');
-    makeOrUpdateChart('countries', ctx, {
-      type:'bar',
-      data:{ labels, datasets:[{ label:'Total Releases', data }] },
-      options:{ plugins:{ title:{ display:true, text:'Top 5 Countries (Summary)' }},
-                scales:{ y:{ beginAtZero:true, ticks:{ precision:0 }}} }
-    });
-    return;
-  } catch (_) { /* fall back */ }
-
-  const counts = {};
-  for (const r of rows){
-    const c = r.country || 'Unknown';
-    counts[c] = (counts[c]||0)+1;
-  }
-  const pairs = Object.entries(counts).sort((a,b)=>b[1]-a[1]).slice(0,5);
-  const labels = pairs.map(p=>p[0]), data = pairs.map(p=>p[1]);
-  const ctx = document.getElementById('chartTopCountries').getContext('2d');
-  makeOrUpdateChart('countries', ctx, {
-    type:'bar',
-    data:{ labels, datasets:[{ label:'Total Releases', data }] },
-    options:{ plugins:{ title:{ display:true, text:'Top 5 Countries — All Time' }},
-              scales:{ y:{ beginAtZero:true, ticks:{ precision:0 }}} }
-  });
-}
-
-// Events
-['change','input'].forEach(ev => {
-  els.country.addEventListener('change', updateAll);
-  els.start.addEventListener('change', updateAll);
-  els.end.addEventListener('change', updateAll);
-});
-
-// Boot
-loadBase().catch(e => {
-  els.status.innerHTML = `<span class="error">${String(e.message || e)}</span>`;
-});
-</script>
+    // Boot
+    loadInitial();
+  </script>
 </body>
 </html>
