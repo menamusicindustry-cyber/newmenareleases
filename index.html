@@ -18,6 +18,7 @@
     label{font-size:.85rem;color:var(--muted)}
     input,select,button{padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:var(--panel);color:var(--text);outline:none}
     input:focus,select:focus,button:focus{border-color:var(--accent);box-shadow:0 0 0 3px #6ea8fe22}
+    a{color:var(--accent)}
     button{cursor:pointer}
     main{max-width:1400px;margin:18px auto;padding:0 16px 40px}
 
@@ -29,6 +30,8 @@
     .meta{color:var(--muted);font-size:.9rem}
     .error{color:#ffb3b3;white-space:pre-wrap}
 
+    /* Table */
+    .table-wrap{overflow:auto;-webkit-overflow-scrolling:touch;max-height:70vh}
     table{width:100%;border-collapse:collapse;table-layout:fixed}
     th,td{border-bottom:1px solid #1e2432;padding:10px 8px;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
     th{color:#cbd5e1;font-weight:600;user-select:none;cursor:pointer}
@@ -45,21 +48,54 @@
     .grow{flex:1}
     .pager{display:flex;gap:8px;align-items:center}
     .pager button[disabled]{opacity:.5;cursor:not-allowed}
+
+    /* Mobile stacked table cards */
+    @media (max-width: 680px){
+      table { border:0; table-layout:auto; }
+      thead { display:none; }
+      .table-wrap{max-height:none}
+      tbody tr{
+        display:block;
+        border:1px solid var(--border);
+        border-radius:12px;
+        padding:10px;
+        margin:10px 0;
+        background:var(--panel);
+      }
+      tbody td{
+        display:grid;
+        grid-template-columns:120px 1fr; /* label | value */
+        gap:8px;
+        white-space:normal;
+        overflow:visible;
+        text-overflow:clip;
+        border-bottom:none;
+        padding:6px 0;
+      }
+      tbody td::before{
+        content:attr(data-label);
+        color:var(--muted);
+        font-size:.85rem;
+      }
+      th.artist, td.artist,
+      th.release, td.release,
+      th.country, td.country,
+      th.date, td.date { width:auto; }
+    }
   </style>
 </head>
 <body>
   <header>
     <h1>MENA Releases</h1>
-    <div class="sub">brought to you by <strong>MENAMUSICINDUSTRY</strong> meme page. Data powered by <strong>MusicBrainz</strong>.</div>
-     <div class="sub" style="margin-top:4px;">
-    Follow me on Instagram:
-    <a href="https://www.instagram.com/menamusicindustry" 
-       target="_blank" 
-       rel="noopener noreferrer"
-       style="color:var(--accent); text-decoration:none;">
-      @menamusicindustry
-    </a>
-  </div>
+    <div class="sub">
+      brought to you by <strong>MENAMUSICINDUSTRY</strong> meme page. Data powered by <strong>MusicBrainz</strong>.
+    </div>
+    <div class="sub" style="margin-top:4px;">
+      Follow me on Instagram:
+      <a href="https://www.instagram.com/YOUR_INSTAGRAM_USERNAME" target="_blank" rel="noopener noreferrer">
+        @YOUR_INSTAGRAM_USERNAME
+      </a>
+    </div>
 
     <div class="controls">
       <div class="control" style="min-width:260px;flex:1">
@@ -81,7 +117,6 @@
       <div class="control" style="align-self:flex-end">
         <button id="clear">Clear filters</button>
       </div>
-      <!-- Removed the "Status" block per your request -->
     </div>
   </header>
 
@@ -96,7 +131,7 @@
             <button id="next">Next</button>
           </div>
         </div>
-        <div style="overflow:auto; max-height:70vh;">
+        <div class="table-wrap">
           <table aria-label="Filtered releases">
             <thead>
               <tr id="thead">
@@ -141,7 +176,6 @@
     let sortDir = 'desc';
     let offset = 0;
     let total = 0; // total over WHOLE filtered dataset
-
     let charts = {};
 
     // ---------- utils ----------
@@ -160,16 +194,15 @@
       const pages = total ? Math.ceil(total/limit) : 0;
       return `${comma(start)} - ${comma(end)} of ${comma(total)} (Page ${comma(page)} / ${comma(pages)})`;
     }
-
     async function fetchJSON(url){
       const res = await fetch(url);
       if (!res.ok) throw new Error(`${res.status} ${res.statusText} @ ${url}`);
       return res.json();
     }
 
-    // -------- Fetch earliest & latest dates, and countries --------
+    // -------- Fetch countries + oldest/newest dates --------
     async function loadFilterOptions(){
-      // Countries: take a sample to populate options
+      // Countries from an ascending sample
       const urlCountries = new URL('/api/releases', location.origin);
       urlCountries.searchParams.set('limit', '1000');
       urlCountries.searchParams.set('sortBy', 'date');
@@ -180,8 +213,7 @@
       for(const c of countries){
         const o=document.createElement('option'); o.value=c; o.textContent=c; els.country.appendChild(o);
       }
-
-      // Date bounds: query oldest (asc) and newest (desc), 1 row each
+      // Oldest (asc, 1) and newest (desc, 1)
       const oldestQ = new URL('/api/releases', location.origin);
       oldestQ.searchParams.set('limit', '1');
       oldestQ.searchParams.set('sortBy', 'date');
@@ -190,11 +222,9 @@
       newestQ.searchParams.set('limit', '1');
       newestQ.searchParams.set('sortBy', 'date');
       newestQ.searchParams.set('sortDir', 'desc');
-
       const [{ results: oldest=[] }, { results: newest=[] }] = await Promise.all([
         fetchJSON(oldestQ.toString()), fetchJSON(newestQ.toString())
       ]);
-
       if (oldest[0]?.date) els.start.value = fmtDate(oldest[0].date);
       if (newest[0]?.date) els.end.value   = fmtDate(newest[0].date);
     }
@@ -247,10 +277,10 @@
       for (const r of rows){
         const tr = document.createElement('tr');
         tr.innerHTML = `
-          <td class="artist">${r.artist || ''}</td>
-          <td class="release">${r.release || ''}</td>
-          <td class="country">${r.country || ''}</td>
-          <td class="date">${fmtDate(r.date)}</td>
+          <td class="artist"  data-label="Artist Name">${r.artist || ''}</td>
+          <td class="release" data-label="Release Name">${r.release || ''}</td>
+          <td class="country" data-label="Artist Country">${r.country || ''}</td>
+          <td class="date"    data-label="Release Date">${fmtDate(r.date)}</td>
         `;
         els.tbody.appendChild(tr);
       }
@@ -343,15 +373,12 @@
     // ---------- boot ----------
     (async ()=>{
       try {
-        await loadFilterOptions(); // sets countries and default (oldest/newest) dates
+        await loadFilterOptions(); // sets countries + oldest/newest date defaults
         await loadPage();
       } catch (e) {
-        // Show a small error above the table if needed
         document.querySelector('.toolbar .meta').textContent = String(e.message || e);
       }
     })();
   </script>
 </body>
 </html>
-
-
