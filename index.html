@@ -27,6 +27,10 @@
     a{color:var(--accent)}
     button{cursor:pointer}
     main{max-width:1400px;margin:18px auto;padding:0 16px 40px}
+    .subheader {
+    font-size: 0.85em; /* makes it smaller than normal text */
+    line-height: 1.3; /* keeps it readable */
+    }
 
     /* Two-column layout: left = table, right = charts */
     .layout{display:grid;grid-template-columns:1fr 420px;gap:16px}
@@ -106,18 +110,11 @@
 <body>
   <header>
     <h1>MENA Releases</h1>
-    <div class="sub" style="font-size: 1rem;">
-      brought to you by <strong>MENAMUSICINDUSTRY</strong> meme page. Data powered by <strong>MusicBrainz</strong>.
-    </div>
-    <div class="sub" style="font-size: 0.85rem; margin-top: 3px;">
-      Follow me on Instagram:
-      <a href="https://www.instagram.com/menamusicindustry" 
-         target="_blank" 
-         rel="noopener noreferrer"
-         style="color: var(--accent); text-decoration: none;">
-         @menamusicindustry
-      </a>
-    </div>
+    <div class="subheader">
+  brought to you by MENAMUSICINDUSTRY meme page. Data powered by MusicBrainz.<br>
+  Follow me on Instagram: @menamusicindustry<br>
+  database is updated weekly or whenever I feel like it
+</div>
     <div class="sub" style="font-size: 0.75rem; margin-top: 2px; color: var(--muted);">
       database is updated weekly or whenever I feel like it
     </div>
@@ -493,4 +490,5 @@
   </script>
 </body>
 </html>
+
 
