@@ -226,18 +226,24 @@
     }
 
     // -------- Fetch countries + oldest/newest dates --------
-    async function loadFilterOptions(){
-      // Countries from an ascending sample
-      const urlCountries = new URL('/api/releases', location.origin);
-      urlCountries.searchParams.set('limit', '1000');
-      urlCountries.searchParams.set('sortBy', 'date');
-      urlCountries.searchParams.set('sortDir', 'asc');
-      const { results: sample=[] } = await fetchJSON(urlCountries.toString());
-      const countries = uniqSorted(sample.map(r=>r.country));
-      els.country.innerHTML='';
-      for(const c of countries){
-        const o=document.createElement('option'); o.value=c; o.textContent=c; els.country.appendChild(o);
-      }
+    // REPLACE this function with the new one:
+  async function loadFilterOptions(){
+    // Get full unique countries + oldest/newest dates from the backend
+    const { countries = [], minDate = null, maxDate = null } =
+      await fetchJSON('/api/options');
+
+    // Fill country multiselect
+    els.country.innerHTML = '';
+    for (const c of countries){
+      const o = document.createElement('option');
+      o.value = c; o.textContent = c;
+      els.country.appendChild(o);
+    }
+
+    // Default date range: oldest -> newest in the whole DB
+    if (minDate) els.start.value = fmtDate(minDate);
+    if (maxDate) els.end.value   = fmtDate(maxDate);
+  }
       // Oldest (asc, 1) and newest (desc, 1)
       const oldestQ = new URL('/api/releases', location.origin);
       oldestQ.searchParams.set('limit', '1');
@@ -407,6 +413,7 @@
   </script>
 </body>
 </html>
+
 
 
 
