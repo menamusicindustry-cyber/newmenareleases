@@ -182,11 +182,13 @@
       </div>
 
       <!-- Right: charts -->
-      <div style="display:flex; flex-direction:column; gap:16px;">
-        <div class="panel"><canvas id="chartTopArtists" height="160"></canvas></div>
-        <div class="panel"><canvas id="chartTopCountries" height="160"></canvas></div>
-      </div>
-    </div>
+ 
+<div style="display:flex; flex-direction:column; gap:16px;">
+  <div class="panel"><canvas id="chartGender" height="160"></canvas></div>
+  <div class="panel"><canvas id="chartTopArtists" height="160"></canvas></div>
+  <div class="panel"><canvas id="chartTopCountries" height="160"></canvas></div>
+</div>
+
   </main>
 
   <script>
@@ -205,6 +207,7 @@
       prev: document.getElementById('prev'),
       next: document.getElementById('next'),
       chartA: document.getElementById('chartTopArtists'),
+      chartG: document.getElementById('chartGender'),
       chartC: document.getElementById('chartTopCountries')
     };
 
@@ -340,44 +343,55 @@
       charts[key] = new Chart(ctx, config);
     }
 
-    async function loadCharts(){
-      const qStats = buildQuery('/api/release-stats');
-      const { topArtists=[], topCountries=[] } = await fetchJSON(qStats.toString());
+   async function loadCharts(){
+  const qStats = buildQuery('/api/release-stats');
+  const { topArtists=[], topCountries=[], genderCounts={ male:0, female:0, other:0 } } =
+    await fetchJSON(qStats.toString());
 
-      // Top 5 Artist - by Release Count
-      makeOrUpdateChart(
-        'A',
-        els.chartA.getContext('2d'),
-        {
-          type:'bar',
-          data:{
-            labels: topArtists.map(x=>x.label),
-            datasets:[{ label:'Releases', data: topArtists.map(x=>x.count) }]
-          },
-          options:{
-            plugins:{ title:{ display:true, text:'Top 5 Artist - by Release Count' }},
-            scales:{ y:{ beginAtZero:true, ticks:{ precision:0 }}}
-          }
-        }
-      );
-
-      // Top 5 Countries - by Release Count
-      makeOrUpdateChart(
-        'C',
-        els.chartC.getContext('2d'),
-        {
-          type:'bar',
-          data:{
-            labels: topCountries.map(x=>x.label),
-            datasets:[{ label:'Total Releases', data: topCountries.map(x=>x.count) }]
-          },
-          options:{
-            plugins:{ title:{ display:true, text:'Top 5 Countries - by Release Count' }},
-            scales:{ y:{ beginAtZero:true, ticks:{ precision:0 }}}
-          }
-        }
-      );
+  // --- Gender split (Pie) ---
+  if (charts.G) charts.G.destroy();
+  charts.G = new Chart(els.chartG.getContext('2d'), {
+    type: 'pie',
+    data: {
+      labels: ['Female', 'Male', 'Other/Unknown'],
+      datasets: [{
+        data: [genderCounts.female || 0, genderCounts.male || 0, genderCounts.other || 0]
+      }]
+    },
+    options: {
+      plugins: { title: { display: true, text: 'Gender Split' } }
     }
+  });
+
+  // --- Top 5 Artist - by Release Count ---
+  if (charts.A) charts.A.destroy();
+  charts.A = new Chart(els.chartA.getContext('2d'), {
+    type:'bar',
+    data:{
+      labels: topArtists.map(x=>x.label),
+      datasets:[{ label:'Releases', data: topArtists.map(x=>x.count) }]
+    },
+    options:{
+      plugins:{ title:{ display:true, text:'Top 5 Artist - by Release Count' }},
+      scales:{ y:{ beginAtZero:true, ticks:{ precision:0 }}}
+    }
+  });
+
+  // --- Top 5 Countries - by Release Count ---
+  if (charts.C) charts.C.destroy();
+  charts.C = new Chart(els.chartC.getContext('2d'), {
+    type:'bar',
+    data:{
+      labels: topCountries.map(x=>x.label),
+      datasets:[{ label:'Total Releases', data: topCountries.map(x=>x.count) }]
+    },
+    options:{
+      plugins:{ title:{ display:true, text:'Top 5 Countries - by Release Count' }},
+      scales:{ y:{ beginAtZero:true, ticks:{ precision:0 }}}
+    }
+  });
+}
+
 
     // ---------- events ----------
     const debounce = (fn, ms=200) => { let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a), ms); }; };
@@ -435,3 +449,4 @@
   </script>
 </body>
 </html>
+
