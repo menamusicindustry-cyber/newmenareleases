@@ -7,7 +7,9 @@ const COL = {
   artist:  'Artist Name',
   release: 'Release Name',
   country: 'Artist Country',
-  date:    'Release Date'
+  date:    'Release Date',
+  label:   'Label Name',   // NEW
+  gender:  'Gender'        // NEW
 };
 
 let CACHE = null, MTIME = 0;
@@ -34,15 +36,16 @@ function loadRows(){
 
   const s = v => (v==null ? '' : String(v)).trim();
 
-  // ✅ Do NOT drop undated rows (date can be null)
+  // Keep rows even if date is missing (date may be null)
   const rows = json.map(r => ({
     artist:  s(r[COL.artist]),
     release: s(r[COL.release]),
     country: s(r[COL.country]),
-    date:    toDate(r[COL.date]) || null
+    date:    toDate(r[COL.date]) || null,
+    label:   s(r[COL.label]),
+    gender:  s(r[COL.gender])
   }))
-  // Keep if artist & release exist (date may be null)
-  .filter(r => r.artist && r.release);
+  .filter(r => r.artist && r.release); // only require artist + release
 
   CACHE = rows; MTIME = st.mtimeMs;
   return rows;
@@ -58,34 +61,52 @@ module.exports = async (req, res) => {
 
     // ---- filters ----
     const q = String(req.query.q || '').toLowerCase();
-    const countries = [].concat(req.query.country || []).map(v => String(v).toLowerCase());
+
+    // helper to read repeatable params: ?country=A&country=B or comma-separated
+    const toList = (key) => {
+      let vals = [].concat(req.query[key] || []);
+      if (vals.length === 1 && String(vals[0]).includes(',')) {
+        vals = String(vals[0]).split(','); // allow comma list
+      }
+      return vals.map(v => String(v).trim()).filter(Boolean);
+    };
+
+    const countries = toList('country').map(v => v.toLowerCase());
+    const labels    = toList('label').map(v => v.toLowerCase());
+    const genders   = toList('gender').map(v => v.toLowerCase());
+
     const start = req.query.start ? new Date(String(req.query.start)) : null;
     const end   = req.query.end   ? new Date(String(req.query.end))   : null;
 
-    // ✅ includeUndated flag (default: true)
+    // includeUndated (default true)
     const includeUndated = String(req.query.includeUndated ?? 'true') === 'true';
 
     let filtered = all.filter(r => {
       if (q && !r.artist.toLowerCase().includes(q)) return false;
-      if (countries.length && !countries.includes((r.country||'').toLowerCase())) return false;
 
-      // ✅ Date logic: allow undated unless explicitly excluded
+      if (countries.length && !countries.includes((r.country || '').toLowerCase())) return false;
+      if (labels.length    && !labels.includes((r.label   || '').toLowerCase()))   return false;
+      if (genders.length   && !genders.includes((r.gender || '').toLowerCase()))   return false;
+
+      // Date filter: apply only to rows that HAVE a date
       if (!r.date) return includeUndated;
 
       if (start && r.date < start) return false;
       if (end   && r.date > end)   return false;
+
       return true;
     });
 
     // ---- sorting ----
-    const sortBy  = (req.query.sortBy || 'date');   // 'artist'|'release'|'country'|'date'
-    const sortDir = (req.query.sortDir || 'desc');  // 'asc'|'desc'
+    const allowedSort = new Set(['artist','release','country','date','label','gender']);
+    const sortBy  = allowedSort.has(String(req.query.sortBy)) ? String(req.query.sortBy) : 'date';
+    const sortDir = (req.query.sortDir === 'asc' ? 'asc' : 'desc');
 
     const cmp = (a, b) => {
       let va = a[sortBy], vb = b[sortBy];
 
       if (sortBy === 'date') {
-        // ✅ Put undated LAST regardless of direction
+        // Put undated LAST regardless of direction
         const aNull = (a.date == null);
         const bNull = (b.date == null);
         if (aNull && bNull) return 0;
@@ -93,6 +114,10 @@ module.exports = async (req, res) => {
         if (bNull) return -1;
         va = a.date.getTime();
         vb = b.date.getTime();
+      } else {
+        // case-insensitive string compare
+        va = (va || '').toString().toLowerCase();
+        vb = (vb || '').toString().toLowerCase();
       }
 
       const base = (va > vb ? 1 : va < vb ? -1 : 0);
@@ -117,7 +142,9 @@ module.exports = async (req, res) => {
         artist:  r.artist,
         release: r.release,
         country: r.country,
-        date:    r.date ? r.date.toISOString() : null  // ✅ return null if missing
+        date:    r.date ? r.date.toISOString() : null,
+        label:   r.label || null,   // NEW
+        gender:  r.gender || null   // NEW
       }))
     });
   } catch (e) {
