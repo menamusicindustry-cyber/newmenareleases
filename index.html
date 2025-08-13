@@ -318,7 +318,8 @@
           <td class="artist"  data-label="Artist Name">${r.artist || ''}</td>
           <td class="release" data-label="Release Name">${r.release || ''}</td>
           <td class="country" data-label="Artist Country">${r.country || ''}</td>
-          <td class="date"    data-label="Release Date">${fmtDate(r.date)}</td>
+          <td class="date" data-label="Release Date">${r.date ? fmtDate(r.date) : 'No date reported'}</td>
+
         `;
         els.tbody.appendChild(tr);
       }
@@ -420,5 +421,6 @@
   </script>
 </body>
 </html>
+
 
 
