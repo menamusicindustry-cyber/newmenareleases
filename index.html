@@ -227,33 +227,46 @@
 
     // -------- Fetch countries + oldest/newest dates --------
     async function loadFilterOptions(){
-      // Countries from an ascending sample
-      const urlCountries = new URL('/api/releases', location.origin);
-      urlCountries.searchParams.set('limit', '1000');
-      urlCountries.searchParams.set('sortBy', 'date');
-      urlCountries.searchParams.set('sortDir', 'asc');
-      const { results: sample=[] } = await fetchJSON(urlCountries.toString());
-      const countries = uniqSorted(sample.map(r=>r.country));
-      els.country.innerHTML='';
-      for(const c of countries){
-        const o=document.createElement('option'); o.value=c; o.textContent=c; els.country.appendChild(o);
-      }
-      // Oldest (asc, 1) and newest (desc, 1)
-      const oldestQ = new URL('/api/releases', location.origin);
-      oldestQ.searchParams.set('limit', '1');
-      oldestQ.searchParams.set('sortBy', 'date');
-      oldestQ.searchParams.set('sortDir', 'asc');
-      const newestQ = new URL('/api/releases', location.origin);
-      newestQ.searchParams.set('limit', '1');
-      newestQ.searchParams.set('sortBy', 'date');
-      newestQ.searchParams.set('sortDir', 'desc');
-      const [{ results: oldest=[] }, { results: newest=[] }] = await Promise.all([
-        fetchJSON(oldestQ.toString()), fetchJSON(newestQ.toString())
-      ]);
-      if (oldest[0]?.date) els.start.value = fmtDate(oldest[0].date);
-      if (newest[0]?.date) els.end.value   = fmtDate(newest[0].date);
-    }
+  // 1) Hardcoded Arab League countries (sorted)
+  const ARAB_COUNTRIES = [
+    'Algeria','Bahrain','Comoros','Djibouti','Egypt','Iraq','Jordan','Kuwait',
+    'Lebanon','Libya','Mauritania','Morocco','Oman','Qatar','Saudi Arabia',
+    'Somalia','State of Palestine','Sudan','Syria','Tunisia','United Arab Emirates','Yemen'
+  ].sort((a,b)=>a.localeCompare(b));
 
+  // Fill the country multiselect
+  els.country.innerHTML = '';
+  for (const c of ARAB_COUNTRIES){
+    const o = document.createElement('option');
+    o.value = c; 
+    o.textContent = c;
+    els.country.appendChild(o);
+  }
+
+  // 2) Oldest (asc, 1) and newest (desc, 1) dates from the DB
+  try {
+    const oldestQ = new URL('/api/releases', location.origin);
+    oldestQ.searchParams.set('limit', '1');
+    oldestQ.searchParams.set('sortBy', 'date');
+    oldestQ.searchParams.set('sortDir', 'asc');
+
+    const newestQ = new URL('/api/releases', location.origin);
+    newestQ.searchParams.set('limit', '1');
+    newestQ.searchParams.set('sortBy', 'date');
+    newestQ.searchParams.set('sortDir', 'desc');
+
+    const [{ results: oldest=[] }, { results: newest=[] }] = await Promise.all([
+      fetchJSON(oldestQ.toString()), 
+      fetchJSON(newestQ.toString())
+    ]);
+
+    if (oldest[0]?.date) els.start.value = fmtDate(oldest[0].date);
+    if (newest[0]?.date) els.end.value   = fmtDate(newest[0].date);
+  } catch (e) {
+    // If date lookups fail, leave date fields empty (user can still filter)
+    console.warn('Date bounds fetch failed:', e);
+  }
+}
     function buildQuery(base){
       const u = new URL(base, location.origin);
       const qv = els.q.value.trim();
@@ -407,4 +420,5 @@
   </script>
 </body>
 </html>
+
 
