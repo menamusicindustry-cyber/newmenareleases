@@ -56,6 +56,13 @@
     table th.gender, table td.gender { min-width: 110px; }
     table th.date,   table td.date   { min-width: 130px; }
 
+    /* Release Date wider */
+table th:nth-child(4),
+table td:nth-child(4) {
+  min-width: 160px; /* Adjust width as needed */
+  white-space: nowrap; /* Keep it in one line */
+}
+
     .toolbar{display:flex;align-items:center;gap:10px;margin:10px 0}
     .grow{flex:1}
     .pager{display:flex;gap:8px;align-items:center}
@@ -139,10 +146,7 @@
       <div class="control">
         <label for="country">Artist Country (multi-select)</label>
         <select id="country" multiple size="6" aria-label="Filter by country"></select>
-        <div class="btnrow">
-          <button id="countryAll" type="button">Select All</button>
-          <button id="countryClear" type="button">Clear</button>
-        </div>
+       
       </div>
 
       <!-- Gender with Select All / Clear -->
@@ -155,10 +159,7 @@
           <option>Group</option>
           <option>Unknown</option>
         </select>
-        <div class="btnrow">
-          <button id="genderAll" type="button">Select All</button>
-          <button id="genderClear" type="button">Clear</button>
-        </div>
+      
       </div>
 
       <!-- Date range -->
@@ -518,3 +519,4 @@
   </script>
 </body>
 </html>
+
