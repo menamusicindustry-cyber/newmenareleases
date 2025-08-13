@@ -22,6 +22,7 @@ function toDate(val){
   const t = Date.parse(val);
   return isNaN(t) ? null : new Date(t);
 }
+
 function loadRows(){
   const filePath = path.join(process.cwd(), 'data', 'NewReleases.xlsx');
   const st = fs.statSync(filePath);
@@ -32,12 +33,16 @@ function loadRows(){
   const json = XLSX.utils.sheet_to_json(ws, { defval:'' });
 
   const s = v => (v==null ? '' : String(v)).trim();
+
+  // ✅ Do NOT drop undated rows (date can be null)
   const rows = json.map(r => ({
     artist:  s(r[COL.artist]),
     release: s(r[COL.release]),
     country: s(r[COL.country]),
-    date:    toDate(r[COL.date])
-  })).filter(r => r.artist && r.release && r.date);
+    date:    toDate(r[COL.date]) || null
+  }))
+  // Keep if artist & release exist (date may be null)
+  .filter(r => r.artist && r.release);
 
   CACHE = rows; MTIME = st.mtimeMs;
   return rows;
@@ -57,21 +62,41 @@ module.exports = async (req, res) => {
     const start = req.query.start ? new Date(String(req.query.start)) : null;
     const end   = req.query.end   ? new Date(String(req.query.end))   : null;
 
+    // ✅ includeUndated flag (default: true)
+    const includeUndated = String(req.query.includeUndated ?? 'true') === 'true';
+
     let filtered = all.filter(r => {
       if (q && !r.artist.toLowerCase().includes(q)) return false;
       if (countries.length && !countries.includes((r.country||'').toLowerCase())) return false;
+
+      // ✅ Date logic: allow undated unless explicitly excluded
+      if (!r.date) return includeUndated;
+
       if (start && r.date < start) return false;
       if (end   && r.date > end)   return false;
       return true;
     });
 
     // ---- sorting ----
-    const sortBy  = (req.query.sortBy || 'date');      // 'artist'|'release'|'country'|'date'
-    const sortDir = (req.query.sortDir || 'desc');     // 'asc'|'desc'
+    const sortBy  = (req.query.sortBy || 'date');   // 'artist'|'release'|'country'|'date'
+    const sortDir = (req.query.sortDir || 'desc');  // 'asc'|'desc'
+
     const cmp = (a, b) => {
       let va = a[sortBy], vb = b[sortBy];
-      if (sortBy === 'date') { va = a.date.getTime(); vb = b.date.getTime(); }
-      return (va > vb ? 1 : va < vb ? -1 : 0) * (sortDir === 'asc' ? 1 : -1);
+
+      if (sortBy === 'date') {
+        // ✅ Put undated LAST regardless of direction
+        const aNull = (a.date == null);
+        const bNull = (b.date == null);
+        if (aNull && bNull) return 0;
+        if (aNull) return 1;
+        if (bNull) return -1;
+        va = a.date.getTime();
+        vb = b.date.getTime();
+      }
+
+      const base = (va > vb ? 1 : va < vb ? -1 : 0);
+      return sortDir === 'asc' ? base : -base;
     };
     filtered.sort(cmp);
 
@@ -92,7 +117,7 @@ module.exports = async (req, res) => {
         artist:  r.artist,
         release: r.release,
         country: r.country,
-        date:    r.date.toISOString()
+        date:    r.date ? r.date.toISOString() : null  // ✅ return null if missing
       }))
     });
   } catch (e) {
