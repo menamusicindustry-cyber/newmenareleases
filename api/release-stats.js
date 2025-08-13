@@ -1,5 +1,4 @@
 // /api/release-stats.js
-// Returns aggregates for the ENTIRE filtered dataset (ignores pagination/sort)
 const path = require('path');
 const fs = require('fs');
 const XLSX = require('xlsx');
@@ -8,7 +7,9 @@ const COL = {
   artist:  'Artist Name',
   release: 'Release Name',
   country: 'Artist Country',
-  date:    'Release Date'
+  date:    'Release Date',
+  label:   'Label Name',
+  gender:  'Gender'
 };
 
 let CACHE = null, MTIME = 0;
@@ -23,6 +24,7 @@ function toDate(val){
   const t = Date.parse(val);
   return isNaN(t) ? null : new Date(t);
 }
+
 function loadRows(){
   const filePath = path.join(process.cwd(), 'data', 'NewReleases.xlsx');
   const st = fs.statSync(filePath);
@@ -37,8 +39,10 @@ function loadRows(){
     artist:  s(r[COL.artist]),
     release: s(r[COL.release]),
     country: s(r[COL.country]),
-    date:    toDate(r[COL.date])
-  })).filter(r => r.artist && r.release && r.date);
+    date:    toDate(r[COL.date]) || null,
+    label:   s(r[COL.label]),
+    gender:  s(r[COL.gender])
+  })).filter(r => r.artist && r.release);
 
   CACHE = rows; MTIME = st.mtimeMs;
   return rows;
@@ -52,40 +56,59 @@ module.exports = async (req, res) => {
   try {
     const all = loadRows();
 
-    // filters (same as /api/releases)
-    const q = String(req.query.q || '').toLowerCase();
-    const countries = [].concat(req.query.country || []).map(v => String(v).toLowerCase());
-    const start = req.query.start ? new Date(String(req.query.start)) : null;
-    const end   = req.query.end   ? new Date(String(req.query.end))   : null;
+    const toList = (key) => {
+      let vals = [].concat(req.query[key] || []);
+      if (vals.length === 1 && String(vals[0]).includes(',')) vals = String(vals[0]).split(',');
+      return vals.map(v => String(v).trim()).filter(Boolean);
+    };
+
+    const q        = String(req.query.q || '').toLowerCase();
+    const countries= toList('country').map(v => v.toLowerCase());
+    const labels   = toList('label').map(v => v.toLowerCase());
+    const genders  = toList('gender').map(v => v.toLowerCase());
+    const start    = req.query.start ? new Date(String(req.query.start)) : null;
+    const end      = req.query.end   ? new Date(String(req.query.end))   : null;
+    const includeUndated = String(req.query.includeUndated ?? 'true') === 'true';
 
     const filtered = all.filter(r => {
       if (q && !r.artist.toLowerCase().includes(q)) return false;
       if (countries.length && !countries.includes((r.country||'').toLowerCase())) return false;
+      if (labels.length    && !labels.includes((r.label  ||'').toLowerCase()))   return false;
+      if (genders.length   && !genders.includes((r.gender||'').toLowerCase()))   return false;
+
+      if (!r.date) return includeUndated;
       if (start && r.date < start) return false;
       if (end   && r.date > end)   return false;
       return true;
     });
 
-    // aggregates over the WHOLE filtered set
+    // Aggregates
     const byArtist = {};
-    const byCountry = {};
+    const byCountry= {};
+    let male=0, female=0, other=0;
+
     for (const r of filtered){
-      byArtist[r.artist] = (byArtist[r.artist]||0) + 1;
-      const c = r.country || 'Unknown';
-      byCountry[c] = (byCountry[c]||0) + 1;
+      byArtist[r.artist]  = (byArtist[r.artist]  || 0) + 1;
+      byCountry[r.country || 'Unknown'] = (byCountry[r.country || 'Unknown'] || 0) + 1;
+
+      const g = (r.gender || '').toLowerCase();
+      if (g === 'male' || g === 'm') male++;
+      else if (g === 'female' || g === 'f') female++;
+      else other++;
     }
 
-    const toTop = (obj, n=5) =>
+    const top = (obj, n=5) =>
       Object.entries(obj).sort((a,b)=>b[1]-a[1]).slice(0,n)
-        .map(([label, count]) => ({ label, count }));
+        .map(([label,count])=>({label,count}));
 
     res.json({
       total: filtered.length,
-      topArtists:  toTop(byArtist, 5),
-      topCountries: toTop(byCountry, 5)
+      topArtists:  top(byArtist),
+      topCountries:top(byCountry),
+      genderCounts: { male, female, other }
     });
   } catch (e) {
     console.error(e);
-    res.status(500).json({ error: String(e && e.message || e) });
+    res.status(500).json({ error: String(e?.message || e) });
   }
 };
