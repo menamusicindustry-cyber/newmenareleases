@@ -1,220 +1,495 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>MENA Releases</title>
-<style>
-  body {
-    font-family: Arial, sans-serif;
-    margin: 0; padding: 0;
-  }
-  header {
-    padding: 10px;
-    background: #f2f2f2;
-    text-align: center;
-  }
-  header h1 {
-    margin: 0;
-  }
-  header p {
-    margin: 3px 0;
-  }
-  header .small-text {
-    font-size: 0.9em;
-    color: #555;
-  }
-  #filters {
-    padding: 10px;
-    display: flex;
-    flex-wrap: wrap;
-    gap: 10px;
-    background: #fafafa;
-    border-bottom: 1px solid #ddd;
-  }
-  #filters label {
-    font-weight: bold;
-    margin-right: 5px;
-  }
-  #filters select, #filters input {
-    padding: 3px;
-  }
-  main {
-    display: flex;
-    flex-direction: row;
-  }
-  #table-container {
-    flex: 2;
-    overflow-x: auto;
-    padding: 10px;
-  }
-  table {
-    border-collapse: collapse;
-    width: 100%;
-  }
-  table th, table td {
-    border: 1px solid #ddd;
-    padding: 6px;
-    text-align: left;
-    vertical-align: top;
-  }
-  table th {
-    background: #f4f4f4;
-    cursor: pointer;
-  }
-  /* Release name wraps */
-  td.release-name {
-    white-space: normal;
-    word-wrap: break-word;
-    max-width: 250px;
-  }
-  /* Fixed widths for date & gender */
-  td.release-date {
-    width: 120px;
-  }
-  td.gender {
-    width: 80px;
-  }
-  #charts {
-    flex: 1;
-    padding: 10px;
-  }
-  @media (max-width: 768px) {
-    main {
-      flex-direction: column;
+  <meta charset="utf-8" />
+  <title>MENA Releases</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <!-- Charts -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1"></script>
+  <style>
+    :root { --bg:#0f1115; --panel:#151922; --text:#e8ecf1; --muted:#9aa3ad; --border:#222938; --accent:#6ea8fe; }
+    *{box-sizing:border-box}
+    body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Inter,Arial,sans-serif;background:var(--bg);color:var(--text)}
+    header{padding:20px;border-bottom:1px solid var(--border);background:linear-gradient(180deg,#141823,#0f1115);position:sticky;top:0;z-index:5}
+    h1{margin:0;font-size:1.6rem}
+    .sub{margin-top:6px;color:var(--muted)}
+    /* Controls: Artist & Label stacked in first column on desktop */
+    .controls{
+      display:grid;gap:10px;margin-top:14px;
+      grid-template-columns: minmax(260px,1fr) repeat(3, minmax(180px, 1fr)) auto;
     }
-    #charts {
-      order: -1;
+    @media (max-width:1100px){ .controls{grid-template-columns:1fr} }
+    .control{display:flex;flex-direction:column;gap:6px;min-width:180px}
+    .control-stack{display:flex;flex-direction:column;gap:10px;min-width:260px}
+    label{font-size:.85rem;color:var(--muted)}
+    input,select,button{padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:var(--panel);color:var(--text);outline:none}
+    input:focus,select:focus,button:focus{border-color:var(--accent);box-shadow:0 0 0 3px #6ea8fe22}
+    a{color:var(--accent)}
+    button{cursor:pointer}
+    main{max-width:1400px;margin:18px auto;padding:0 16px 40px}
+
+    /* Two-column layout: left = table, right = charts */
+    .layout{display:grid;grid-template-columns:1fr 420px;gap:16px}
+    @media (max-width:1100px){ .layout{grid-template-columns:1fr} }
+
+    .panel{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:14px}
+    .meta{color:var(--muted);font-size:.9rem}
+    .error{color:#ffb3b3;white-space:pre-wrap}
+
+    /* Table */
+    .table-wrap{overflow:auto;-webkit-overflow-scrolling:touch;max-height:70vh}
+    table{width:100%;border-collapse:collapse;table-layout:fixed}
+    th,td{border-bottom:1px solid #1e2432;padding:10px 8px;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    th{color:#cbd5e1;font-weight:600;user-select:none;cursor:pointer}
+    th .dir{opacity:.8;margin-left:4px}
+    tbody tr:hover{background:#161c27}
+
+    /* Column widths + wrapping */
+    th.artist, td.artist   { width: 18%; }
+    th.release, td.release { width: 30%; white-space: normal; overflow: visible; word-break: break-word; overflow-wrap: anywhere; }
+    th.country, td.country { width: 14%; }
+    th.label, td.label     { width: 16%; white-space: normal; word-break: break-word; }
+    th.gender, td.gender   { width: 10%; }
+    th.date, td.date       { width: 12%; }
+
+    /* Ensure Gender & Date have readable space */
+    table th.gender, table td.gender { min-width: 120px; }
+    table th.date,   table td.date   { min-width: 160px; white-space: nowrap; }
+
+    .toolbar{display:flex;align-items:center;gap:10px;margin:10px 0}
+    .grow{flex:1}
+    .pager{display:flex;gap:8px;align-items:center}
+    .pager button[disabled]{opacity:.5;cursor:not-allowed}
+
+    /* Mobile stacked table cards */
+    @media (max-width: 680px){
+      table { border:0; table-layout:auto; }
+      thead { display:none; }
+      .table-wrap{max-height:none}
+      tbody tr{
+        display:block;
+        border:1px solid var(--border);
+        border-radius:12px;
+        padding:10px;
+        margin:10px 0;
+        background:var(--panel);
+      }
+      tbody td{
+        display:grid;
+        grid-template-columns:120px 1fr; /* label | value */
+        gap:8px;
+        white-space:normal;
+        overflow:visible;
+        text-overflow:clip;
+        border-bottom:none;
+        padding:6px 0;
+      }
+      tbody td::before{
+        content:attr(data-label);
+        color:var(--muted);
+        font-size:.85rem;
+      }
+      th.artist, td.artist,
+      th.release, td.release,
+      th.country, td.country,
+      th.label, td.label,
+      th.gender, td.gender,
+      th.date, td.date { width:auto; }
     }
-    /* Put date filters side by side on mobile */
-    .date-range {
-      display: flex;
-      gap: 5px;
-    }
-  }
-</style>
+
+    /* Mobile: date inputs side-by-side; desktop stacked */
+    .date-range .date-inputs { display:flex; gap:6px; }
+    .date-range .date-inputs input { flex:1; min-width:0; }
+    @media (min-width: 681px) { .date-range .date-inputs { flex-direction:column; } }
+  </style>
 </head>
 <body>
-
-<header>
-  <h1>MENA Releases</h1>
-  <p>brought to you by MENAMUSICINDUSTRY meme page. Data powered by MusicBrainz.</p>
-  <p class="small-text">Follow me on Instagram: <a href="https://instagram.com/menamusicindustry" target="_blank">@menamusicindustry</a></p>
-  <p class="small-text">Database is updated weekly or whenever I feel like it.</p>
-</header>
-
-<section id="filters">
-  <div>
-    <label>Artist Name:</label>
-    <input type="text" id="artistFilter" placeholder="Search artist...">
-  </div>
-  <div>
-    <label>Label Name:</label>
-    <input type="text" id="labelFilter" placeholder="Search label...">
-  </div>
-  <div>
-    <label>Artist Country:</label>
-    <select id="countryFilter" multiple size="4"></select>
-  </div>
-  <div>
-    <label>Gender:</label>
-    <select id="genderFilter" multiple size="3">
-      <option value="Male">Male</option>
-      <option value="Female">Female</option>
-    </select>
-  </div>
-  <div class="date-range">
-    <div>
-      <label>Release Date (start):</label>
-      <input type="date" id="startDate">
+  <header>
+    <h1>MENA Releases</h1>
+    <div class="sub" style="font-size: 1rem;">
+      brought to you by <strong>MENAMUSICINDUSTRY</strong> meme page. Data powered by <strong>MusicBrainz</strong>.
     </div>
-    <div>
-      <label>Release Date (end):</label>
-      <input type="date" id="endDate">
+    <div class="sub" style="font-size: 0.85rem; margin-top: 3px;">
+      Follow me on Instagram:
+      <a href="https://www.instagram.com/YOUR_INSTAGRAM_USERNAME" 
+         target="_blank" 
+         rel="noopener noreferrer"
+         style="color: var(--accent); text-decoration: none;">
+         @YOUR_INSTAGRAM_USERNAME
+      </a>
     </div>
-  </div>
-  <div>
-    <button id="clearFilters">Clear Filters</button>
-  </div>
-</section>
+    <div class="sub" style="font-size: 0.75rem; margin-top: 2px; color: var(--muted);">
+      database is updated weekly or whenever I feel like it
+    </div>
 
-<main>
-  <div id="table-container">
-    <table id="releasesTable">
-      <thead>
-        <tr>
-          <th data-sort="artist">Artist</th>
-          <th data-sort="release">Release Name</th>
-          <th data-sort="country">Country</th>
-          <th data-sort="label">Label Name</th>
-          <th data-sort="date">Release Date</th>
-          <th data-sort="gender">Gender</th>
-        </tr>
-      </thead>
-      <tbody></tbody>
-    </table>
-    <div id="pagination"></div>
-  </div>
-  <div id="charts">
-    <canvas id="topArtistsChart"></canvas>
-    <canvas id="topCountriesChart"></canvas>
-    <canvas id="genderPieChart"></canvas>
-  </div>
-</main>
+    <div class="controls">
+      <!-- Artist + Label stacked in one column on desktop -->
+      <div class="control-stack">
+        <div class="control">
+          <label for="q">Search by Artist Name</label>
+          <input id="q" type="text" placeholder="Type an artist name…">
+        </div>
+        <div class="control">
+          <label for="label">Label Name</label>
+          <input id="label" type="text" placeholder="Search by label…">
+        </div>
+      </div>
 
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-<script>
-// --- Example JS logic (replace with your real fetch code) ---
-const tableBody = document.querySelector("#releasesTable tbody");
+      <div class="control">
+        <label for="country">Artist Country (multi-select)</label>
+        <select id="country" multiple size="6" aria-label="Filter by country"></select>
+      </div>
 
-function renderTable(data) {
-  tableBody.innerHTML = "";
-  data.forEach(row => {
-    const tr = document.createElement("tr");
-    tr.innerHTML = `
-      <td>${row.artist}</td>
-      <td class="release-name">${row.release}</td>
-      <td>${row.country}</td>
-      <td>${row.label || ""}</td>
-      <td class="release-date">${row.date || ""}</td>
-      <td class="gender">${row.gender || ""}</td>
-    `;
-    tableBody.appendChild(tr);
-  });
-}
+      <div class="control">
+        <label for="gender">Gender (multi-select)</label>
+        <select id="gender" multiple size="5" aria-label="Filter by gender">
+          <option>Female</option>
+          <option>Male</option>
+          <option>Non-binary</option>
+          <option>Group</option>
+          <option>Unknown</option>
+        </select>
+      </div>
 
-// Example placeholder data:
-renderTable([
-  { artist: "Paul Bowles", release: "Baptism of Solitude", country: "Morocco", label: "Example Label", date: "1995-01-01", gender: "Male" },
-  { artist: "Test Artist", release: "A Very Long Release Name That Should Wrap Correctly In The Table Cell Without Expanding Too Much Horizontally", country: "Egypt", label: "Label X", date: "2000-05-20", gender: "Female" }
-]);
+      <div class="control date-range">
+        <label>Release Date</label>
+        <div class="date-inputs">
+          <input id="start" type="date" aria-label="Release Date start">
+          <input id="end" type="date" aria-label="Release Date end">
+        </div>
+      </div>
 
-// Chart placeholder:
-const genderCtx = document.getElementById("genderPieChart");
-new Chart(genderCtx, {
-  type: "pie",
-  data: {
-    labels: ["Male", "Female"],
-    datasets: [{
-      data: [60, 40],
-      backgroundColor: ["#6baed6", "#9ecae1"]
-    }]
-  },
-  options: {
-    plugins: {
-      tooltip: {
-        callbacks: {
-          label: function(context) {
-            const total = context.dataset.data.reduce((a,b) => a + b, 0);
-            const value = context.parsed;
-            const pct = ((value / total) * 100).toFixed(1) + "%";
-            return `${context.label}: ${value} (${pct})`;
-          }
-        }
+      <div class="control" style="align-self:flex-end">
+        <button id="clear">Clear filters</button>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <div class="layout">
+      <!-- Left: results table with sorting + pagination -->
+      <div class="panel">
+        <div class="toolbar">
+          <div class="meta grow" id="summary">0 shown</div>
+          <div class="pager">
+            <button id="prev">Prev</button>
+            <button id="next">Next</button>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table aria-label="Filtered releases">
+            <thead>
+              <tr id="thead">
+                <th class="artist"  data-key="artist">Artist Name<span class="dir" aria-hidden="true"></span></th>
+                <th class="release" data-key="release">Release Name<span class="dir" aria-hidden="true"></span></th>
+                <th class="country" data-key="country">Artist Country<span class="dir" aria-hidden="true"></span></th>
+                <th class="label"   data-key="label">Label Name<span class="dir" aria-hidden="true"></span></th>
+                <th class="gender"  data-key="gender">Gender<span class="dir" aria-hidden="true"></span></th>
+                <th class="date"    data-key="date">Release Date<span class="dir" aria-hidden="true"></span></th>
+              </tr>
+            </thead>
+            <tbody id="tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Right: charts -->
+      <div style="display:flex; flex-direction:column; gap:16px;">
+        <div class="panel"><canvas id="chartGender" height="160"></canvas></div>
+        <div class="panel"><canvas id="chartTopArtists" height="160"></canvas></div>
+        <div class="panel"><canvas id="chartTopCountries" height="160"></canvas></div>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    // ---------- state ----------
+    const els = {
+      q: document.getElementById('q'),
+      label: document.getElementById('label'),
+      gender: document.getElementById('gender'),
+      country: document.getElementById('country'),
+      start: document.getElementById('start'),
+      end: document.getElementById('end'),
+      clear: document.getElementById('clear'),
+      summary: document.getElementById('summary'),
+      tbody: document.getElementById('tbody'),
+      thead: document.getElementById('thead'),
+      prev: document.getElementById('prev'),
+      next: document.getElementById('next'),
+      chartG: document.getElementById('chartGender'),
+      chartA: document.getElementById('chartTopArtists'),
+      chartC: document.getElementById('chartTopCountries')
+    };
+
+    const PAGE_SIZE = 100;
+    let sortBy = 'date';
+    let sortDir = 'desc';
+    let offset = 0;
+    let total = 0;
+    let charts = {}; // { G, A, C }
+
+    // ---------- utils ----------
+    const selected = sel => Array.from(sel.selectedOptions).map(o=>o.value);
+    const fmtDate = iso => {
+      if (!iso) return 'No date reported';
+      const d = new Date(iso); if(isNaN(d)) return 'No date reported';
+      const y=d.getFullYear(), m=String(d.getMonth()+1).padStart(2,'0'), da=String(d.getDate()).padStart(2,'0');
+      return `${y}-${m}-${da}`;
+    };
+    const comma = n => Number(n).toLocaleString();
+    function statusLine(offset, limit, total){
+      const start = total ? offset + 1 : 0;
+      const end   = Math.min(offset + limit, total);
+      const page  = total ? Math.floor(offset/limit)+1 : 0;
+      const pages = total ? Math.ceil(total/limit) : 0;
+      return `${comma(start)} - ${comma(end)} of ${comma(total)} (Page ${comma(page)} / ${comma(pages)})`;
+    }
+    async function fetchJSON(url){
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`${res.status} ${res.statusText} @ ${url}`);
+      return res.json();
+    }
+
+    // -------- Countries + default date bounds --------
+    async function loadFilterOptions(){
+      // Arab League list with "Palestine"
+      const ARAB_COUNTRIES = [
+        'Algeria','Bahrain','Comoros','Djibouti','Egypt','Iraq','Jordan','Kuwait',
+        'Lebanon','Libya','Mauritania','Morocco','Oman','Qatar','Saudi Arabia',
+        'Somalia','Palestine','Sudan','Syria','Tunisia','United Arab Emirates','Yemen'
+      ].sort((a,b)=>a.localeCompare(b));
+
+      els.country.innerHTML='';
+      for(const c of ARAB_COUNTRIES){
+        const o=document.createElement('option'); o.value=c; o.textContent=c; els.country.appendChild(o);
+      }
+
+      // Oldest and newest to set defaults (best effort)
+      try {
+        const oldestQ = new URL('/api/releases', location.origin);
+        oldestQ.searchParams.set('limit', '1');
+        oldestQ.searchParams.set('sortBy', 'date');
+        oldestQ.searchParams.set('sortDir', 'asc');
+        const newestQ = new URL('/api/releases', location.origin);
+        newestQ.searchParams.set('limit', '1');
+        newestQ.searchParams.set('sortBy', 'date');
+        newestQ.searchParams.set('sortDir', 'desc');
+        const [{ results: oldest=[] }, { results: newest=[] }] = await Promise.all([
+          fetchJSON(oldestQ.toString()), fetchJSON(newestQ.toString())
+        ]);
+        if (oldest[0]?.date) els.start.value = fmtDate(oldest[0].date);
+        if (newest[0]?.date) els.end.value   = fmtDate(newest[0].date);
+      } catch(e){
+        console.warn('Could not set default date bounds:', e);
       }
     }
-  }
-});
-</script>
+
+    function buildQuery(base){
+      const u = new URL(base, location.origin);
+      const qv = els.q.value.trim();
+      const labelQ = els.label.value.trim();
+      const cn = selected(els.country);
+      const genders = selected(els.gender);
+
+      if (qv) u.searchParams.set('q', qv);
+      if (labelQ) u.searchParams.set('label', labelQ);
+      cn.forEach(c=>u.searchParams.append('country', c));
+      genders.forEach(g=>u.searchParams.append('gender', g));
+      if (els.start.value) u.searchParams.set('start', els.start.value);
+      if (els.end.value)   u.searchParams.set('end',   els.end.value);
+      return u;
+    }
+
+    async function loadPage(){
+      const qTable = buildQuery('/api/releases');
+      qTable.searchParams.set('limit', PAGE_SIZE.toString());
+      qTable.searchParams.set('offset', offset.toString());
+      qTable.searchParams.set('sortBy', sortBy);
+      qTable.searchParams.set('sortDir', sortDir);
+      const data = await fetchJSON(qTable.toString());
+
+      total = data.total || 0;
+      renderTable(data.results || []);
+      renderStatus();
+      setPagerButtons();
+      setHeaderIcons();
+
+      // charts (global aggregates for filters only)
+      await loadCharts();
+    }
+
+    function renderStatus(){
+      els.summary.textContent = statusLine(offset, PAGE_SIZE, total);
+    }
+    function setPagerButtons(){
+      els.prev.disabled = (offset === 0);
+      els.next.disabled = (offset + PAGE_SIZE >= total);
+    }
+    function setHeaderIcons(){
+      document.querySelectorAll('th[data-key] .dir').forEach(el=>el.textContent='');
+      const th = document.querySelector(`th[data-key="${sortBy}"] .dir`);
+      if (th) th.textContent = sortDir === 'asc' ? '▲' : '▼';
+    }
+
+    function renderTable(rows){
+      els.tbody.innerHTML = '';
+      for (const r of rows){
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td class="artist"  data-label="Artist Name">${r.artist || ''}</td>
+          <td class="release" data-label="Release Name">${r.release || ''}</td>
+          <td class="country" data-label="Artist Country">${r.country || ''}</td>
+          <td class="label"   data-label="Label Name">${r.label || ''}</td>
+          <td class="gender"  data-label="Gender">${r.gender || ''}</td>
+          <td class="date"    data-label="Release Date">${fmtDate(r.date)}</td>
+        `;
+        els.tbody.appendChild(tr);
+      }
+    }
+
+    function makeOrUpdateChart(key, ctx, config){
+      if (charts[key]) charts[key].destroy();
+      charts[key] = new Chart(ctx, config);
+    }
+
+    async function loadCharts(){
+      const qStats = buildQuery('/api/release-stats');
+      const { topArtists=[], topCountries=[], genderCounts={ male:0, female:0, other:0 } } =
+        await fetchJSON(qStats.toString());
+
+      // --- Gender Split (Pie) with subtle colors + tooltip % + count ---
+      makeOrUpdateChart(
+        'G',
+        els.chartG.getContext('2d'),
+        {
+          type: 'pie',
+          data: {
+            labels: ['Female', 'Male', 'Other/Unknown'],
+            datasets: [{
+              data: [genderCounts.female || 0, genderCounts.male || 0, genderCounts.other || 0],
+              backgroundColor: [
+                'rgba(255, 159, 186, 0.75)', // soft pink
+                'rgba(147, 197, 253, 0.75)', // soft blue
+                'rgba(203, 213, 225, 0.75)'  // soft gray
+              ],
+              borderColor: [
+                'rgba(255, 159, 186, 1)',
+                'rgba(147, 197, 253, 1)',
+                'rgba(203, 213, 225, 1)'
+              ],
+              borderWidth: 1
+            }]
+          },
+          options: {
+            plugins: {
+              title: { display: true, text: 'Gender Split' },
+              legend: { position: 'bottom' },
+              tooltip: {
+                callbacks: {
+                  label: function(context){
+                    const label = context.label ?? '';
+                    const value = context.raw ?? 0;
+                    const dataArr = context.dataset.data || [];
+                    const total = dataArr.reduce((a,b)=>a+(+b||0), 0) || 1;
+                    const pct = ((value / total) * 100).toFixed(1);
+                    return `${label}: ${value} (${pct}%)`;
+                  }
+                }
+              }
+            }
+          }
+        }
+      );
+
+      // --- Top 5 Artist - by Release Count ---
+      makeOrUpdateChart(
+        'A',
+        els.chartA.getContext('2d'),
+        {
+          type:'bar',
+          data:{
+            labels: topArtists.map(x=>x.label),
+            datasets:[{ label:'Releases', data: topArtists.map(x=>x.count) }]
+          },
+          options:{
+            plugins:{ title:{ display:true, text:'Top 5 Artist - by Release Count' }},
+            scales:{ y:{ beginAtZero:true, ticks:{ precision:0 }}}
+          }
+        }
+      );
+
+      // --- Top 5 Countries - by Release Count ---
+      makeOrUpdateChart(
+        'C',
+        els.chartC.getContext('2d'),
+        {
+          type:'bar',
+          data:{
+            labels: topCountries.map(x=>x.label),
+            datasets:[{ label:'Total Releases', data: topCountries.map(x=>x.count) }]
+          },
+          options:{
+            plugins:{ title:{ display:true, text:'Top 5 Countries - by Release Count' }},
+            scales:{ y:{ beginAtZero:true, ticks:{ precision:0 }}}
+          }
+        }
+      );
+    }
+
+    // ---------- events ----------
+    const debounce = (fn, ms=200) => { let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a), ms); }; };
+
+    // sort on header click
+    els.thead.addEventListener('click', (e)=>{
+      const th = e.target.closest('th[data-key]');
+      if (!th) return;
+      const key = th.getAttribute('data-key');
+      if (sortBy === key){ sortDir = (sortDir === 'asc' ? 'desc' : 'asc'); }
+      else { sortBy = key; sortDir = (key === 'date' ? 'desc' : 'asc'); }
+      offset = 0;
+      loadPage().catch(console.error);
+    });
+
+    // filters (reset to first page + reload)
+    const onFilter = debounce(()=>{ offset = 0; loadPage().catch(console.error); }, 250);
+    els.q.addEventListener('input', onFilter);
+    els.label.addEventListener('input', onFilter);
+    els.gender.addEventListener('change', onFilter);
+    els.country.addEventListener('change', onFilter);
+    els.start.addEventListener('change', onFilter);
+    els.end.addEventListener('change', onFilter);
+
+    // clear filters
+    els.clear.addEventListener('click', async ()=>{
+      els.q.value = '';
+      els.label.value = '';
+      Array.from(els.country.options).forEach(o=>o.selected=false);
+      Array.from(els.gender.options).forEach(o=>o.selected=false);
+      await loadFilterOptions(); // resets date range
+      sortBy = 'date'; sortDir = 'desc'; offset = 0;
+      loadPage().catch(console.error);
+    });
+
+    // pagination
+    els.prev.addEventListener('click', ()=>{
+      offset = Math.max(0, offset - PAGE_SIZE);
+      loadPage().catch(console.error);
+    });
+    els.next.addEventListener('click', ()=>{
+      offset = Math.min(Math.max(0, total - PAGE_SIZE), offset + PAGE_SIZE);
+      loadPage().catch(console.error);
+    });
+
+    // ---------- boot ----------
+    (async ()=>{
+      try {
+        await loadFilterOptions();
+        await loadPage();
+      } catch (e) {
+        document.querySelector('.toolbar .meta').textContent = String(e.message || e);
+      }
+    })();
+  </script>
 </body>
 </html>
