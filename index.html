@@ -51,6 +51,24 @@
     .pager{display:flex;gap:8px;align-items:center}
     .pager button[disabled]{opacity:.5;cursor:not-allowed}
 
+/* Make Release Date and Gender columns more readable */
+table th:nth-child(4),
+table td:nth-child(4) {
+  min-width: 120px; /* Release Date */
+}
+
+table th:nth-child(5),
+table td:nth-child(5) {
+  min-width: 100px; /* Gender */
+}
+
+    /* Allow wrapping for long text in all table cells */
+table th, table td {
+  white-space: normal;
+  word-break: break-word;
+}
+
+    
     /* Mobile stacked table cards */
     @media (max-width: 680px){
       table { border:0; table-layout:auto; }
@@ -449,5 +467,6 @@
   </script>
 </body>
 </html>
+
 
 
