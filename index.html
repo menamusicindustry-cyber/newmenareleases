@@ -51,24 +51,6 @@
     .pager{display:flex;gap:8px;align-items:center}
     .pager button[disabled]{opacity:.5;cursor:not-allowed}
 
-/* Make Release Date and Gender columns more readable */
-table th:nth-child(4),
-table td:nth-child(4) {
-  min-width: 120px; /* Release Date */
-}
-
-table th:nth-child(5),
-table td:nth-child(5) {
-  min-width: 100px; /* Gender */
-}
-
-    /* Allow wrapping for long text in all table cells */
-table th, table td {
-  white-space: normal;
-  word-break: break-word;
-}
-
-    
     /* Mobile stacked table cards */
     @media (max-width: 680px){
       table { border:0; table-layout:auto; }
@@ -119,11 +101,11 @@ table th, table td {
     </div>
     <div class="sub" style="font-size: 0.85rem; margin-top: 3px;">
       Follow me on Instagram:
-      <a href="https://www.instagram.com/menamusicindustry" 
+      <a href="https://www.instagram.com/YOUR_INSTAGRAM_USERNAME" 
          target="_blank" 
          rel="noopener noreferrer"
          style="color: var(--accent); text-decoration: none;">
-         @menamusicindustry
+         @YOUR_INSTAGRAM_USERNAME
       </a>
     </div>
     <div class="sub" style="font-size: 0.75rem; margin-top: 2px; color: var(--muted);">
@@ -200,13 +182,12 @@ table th, table td {
       </div>
 
       <!-- Right: charts -->
- 
-<div style="display:flex; flex-direction:column; gap:16px;">
-  <div class="panel"><canvas id="chartGender" height="160"></canvas></div>
-  <div class="panel"><canvas id="chartTopArtists" height="160"></canvas></div>
-  <div class="panel"><canvas id="chartTopCountries" height="160"></canvas></div>
-</div>
-
+      <div style="display:flex; flex-direction:column; gap:16px;">
+        <div class="panel"><canvas id="chartGender" height="160"></canvas></div>
+        <div class="panel"><canvas id="chartTopArtists" height="160"></canvas></div>
+        <div class="panel"><canvas id="chartTopCountries" height="160"></canvas></div>
+      </div>
+    </div>
   </main>
 
   <script>
@@ -224,8 +205,8 @@ table th, table td {
       thead: document.getElementById('thead'),
       prev: document.getElementById('prev'),
       next: document.getElementById('next'),
-      chartA: document.getElementById('chartTopArtists'),
       chartG: document.getElementById('chartGender'),
+      chartA: document.getElementById('chartTopArtists'),
       chartC: document.getElementById('chartTopCountries')
     };
 
@@ -234,10 +215,9 @@ table th, table td {
     let sortDir = 'desc';
     let offset = 0;
     let total = 0;
-    let charts = {};
+    let charts = {}; // { G, A, C }
 
     // ---------- utils ----------
-    const uniqSorted = a => Array.from(new Set(a.filter(Boolean))).sort((x,y)=>x.localeCompare(y));
     const selected = sel => Array.from(sel.selectedOptions).map(o=>o.value);
     const fmtDate = iso => {
       if (!iso) return 'No date reported';
@@ -259,7 +239,7 @@ table th, table td {
       return res.json();
     }
 
-    // -------- Countries + default date bounds (sample method you already had) --------
+    // -------- Countries + default date bounds --------
     async function loadFilterOptions(){
       // Hardcode Arab League countries so they always show
       const ARAB_COUNTRIES = [
@@ -273,7 +253,7 @@ table th, table td {
         const o=document.createElement('option'); o.value=c; o.textContent=c; els.country.appendChild(o);
       }
 
-      // Oldest (asc, 1) and newest (desc, 1) to set defaults
+      // Oldest and newest to set defaults (best effort)
       try {
         const oldestQ = new URL('/api/releases', location.origin);
         oldestQ.searchParams.set('limit', '1');
@@ -361,55 +341,89 @@ table th, table td {
       charts[key] = new Chart(ctx, config);
     }
 
-   async function loadCharts(){
-  const qStats = buildQuery('/api/release-stats');
-  const { topArtists=[], topCountries=[], genderCounts={ male:0, female:0, other:0 } } =
-    await fetchJSON(qStats.toString());
+    async function loadCharts(){
+      const qStats = buildQuery('/api/release-stats');
+      const { topArtists=[], topCountries=[], genderCounts={ male:0, female:0, other:0 } } =
+        await fetchJSON(qStats.toString());
 
-  // --- Gender split (Pie) ---
-  if (charts.G) charts.G.destroy();
-  charts.G = new Chart(els.chartG.getContext('2d'), {
-    type: 'pie',
-    data: {
-      labels: ['Female', 'Male', 'Other/Unknown'],
-      datasets: [{
-        data: [genderCounts.female || 0, genderCounts.male || 0, genderCounts.other || 0]
-      }]
-    },
-    options: {
-      plugins: { title: { display: true, text: 'Gender Split' } }
+      // --- Gender Split (Pie) with subtle colors + tooltip % + count ---
+      makeOrUpdateChart(
+        'G',
+        els.chartG.getContext('2d'),
+        {
+          type: 'pie',
+          data: {
+            labels: ['Female', 'Male', 'Other/Unknown'],
+            datasets: [{
+              data: [genderCounts.female || 0, genderCounts.male || 0, genderCounts.other || 0],
+              backgroundColor: [
+                'rgba(255, 159, 186, 0.75)', // soft pink
+                'rgba(147, 197, 253, 0.75)', // soft blue
+                'rgba(203, 213, 225, 0.75)'  // soft gray
+              ],
+              borderColor: [
+                'rgba(255, 159, 186, 1)',
+                'rgba(147, 197, 253, 1)',
+                'rgba(203, 213, 225, 1)'
+              ],
+              borderWidth: 1
+            }]
+          },
+          options: {
+            plugins: {
+              title: { display: true, text: 'Gender Split' },
+              legend: { position: 'bottom' },
+              tooltip: {
+                callbacks: {
+                  label: function(context){
+                    const label = context.label ?? '';
+                    const value = context.raw ?? 0;
+                    const dataArr = context.dataset.data || [];
+                    const total = dataArr.reduce((a,b)=>a+(+b||0), 0) || 1;
+                    const pct = ((value / total) * 100).toFixed(1);
+                    return `${label}: ${value} (${pct}%)`;
+                  }
+                }
+              }
+            }
+          }
+        }
+      );
+
+      // --- Top 5 Artist - by Release Count ---
+      makeOrUpdateChart(
+        'A',
+        els.chartA.getContext('2d'),
+        {
+          type:'bar',
+          data:{
+            labels: topArtists.map(x=>x.label),
+            datasets:[{ label:'Releases', data: topArtists.map(x=>x.count) }]
+          },
+          options:{
+            plugins:{ title:{ display:true, text:'Top 5 Artist - by Release Count' }},
+            scales:{ y:{ beginAtZero:true, ticks:{ precision:0 }}}
+          }
+        }
+      );
+
+      // --- Top 5 Countries - by Release Count ---
+      makeOrUpdateChart(
+        'C',
+        els.chartC.getContext('2d'),
+        {
+          type:'bar',
+          data:{
+            labels: topCountries.map(x=>x.label),
+            datasets:[{ label:'Total Releases', data: topCountries.map(x=>x.count) }]
+          },
+          options:{
+            plugins:{ title:{ display:true, text:'Top 5 Countries - by Release Count' }},
+            scales:{ y:{ beginAtZero:true, ticks:{ precision:0 }}}
+          }
+        }
+      );
     }
-  });
-
-  // --- Top 5 Artist - by Release Count ---
-  if (charts.A) charts.A.destroy();
-  charts.A = new Chart(els.chartA.getContext('2d'), {
-    type:'bar',
-    data:{
-      labels: topArtists.map(x=>x.label),
-      datasets:[{ label:'Releases', data: topArtists.map(x=>x.count) }]
-    },
-    options:{
-      plugins:{ title:{ display:true, text:'Top 5 Artist - by Release Count' }},
-      scales:{ y:{ beginAtZero:true, ticks:{ precision:0 }}}
-    }
-  });
-
-  // --- Top 5 Countries - by Release Count ---
-  if (charts.C) charts.C.destroy();
-  charts.C = new Chart(els.chartC.getContext('2d'), {
-    type:'bar',
-    data:{
-      labels: topCountries.map(x=>x.label),
-      datasets:[{ label:'Total Releases', data: topCountries.map(x=>x.count) }]
-    },
-    options:{
-      plugins:{ title:{ display:true, text:'Top 5 Countries - by Release Count' }},
-      scales:{ y:{ beginAtZero:true, ticks:{ precision:0 }}}
-    }
-  });
-}
-
 
     // ---------- events ----------
     const debounce = (fn, ms=200) => { let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a), ms); }; };
@@ -467,6 +481,3 @@ table th, table td {
   </script>
 </body>
 </html>
-
-
-
