@@ -13,9 +13,12 @@
     header{padding:20px;border-bottom:1px solid var(--border);background:linear-gradient(180deg,#141823,#0f1115);position:sticky;top:0;z-index:5}
     h1{margin:0;font-size:1.6rem}
     .sub{margin-top:6px;color:var(--muted)}
-    .controls{display:grid;gap:10px;margin-top:14px;grid-template-columns: minmax(260px,1fr) repeat(3, minmax(180px, 1fr)) auto;}
+    /* Controls: Artist & Label stacked in first column on desktop */
+    .controls{
+      display:grid;gap:10px;margin-top:14px;
+      grid-template-columns: minmax(260px,1fr) repeat(3, minmax(180px, 1fr)) auto;
+    }
     @media (max-width:1100px){ .controls{grid-template-columns:1fr} }
-
     .control{display:flex;flex-direction:column;gap:6px;min-width:180px}
     .control-stack{display:flex;flex-direction:column;gap:10px;min-width:260px}
     label{font-size:.85rem;color:var(--muted)}
@@ -23,9 +26,6 @@
     input:focus,select:focus,button:focus{border-color:var(--accent);box-shadow:0 0 0 3px #6ea8fe22}
     a{color:var(--accent)}
     button{cursor:pointer}
-    .btnrow{display:flex;gap:6px;margin-top:6px}
-    .btnrow button{padding:6px 10px;font-size:.85rem}
-
     main{max-width:1400px;margin:18px auto;padding:0 16px 40px}
 
     /* Two-column layout: left = table, right = charts */
@@ -44,7 +44,7 @@
     th .dir{opacity:.8;margin-left:4px}
     tbody tr:hover{background:#161c27}
 
-    /* Column widths + wrapping for long columns */
+    /* Column widths + wrapping */
     th.artist, td.artist   { width: 18%; }
     th.release, td.release { width: 30%; white-space: normal; overflow: visible; word-break: break-word; overflow-wrap: anywhere; }
     th.country, td.country { width: 14%; }
@@ -53,15 +53,8 @@
     th.date, td.date       { width: 12%; }
 
     /* Ensure Gender & Date have readable space */
-    table th.gender, table td.gender { min-width: 110px; }
-    table th.date,   table td.date   { min-width: 130px; }
-
-    /* Release Date wider */
-table th:nth-child(4),
-table td:nth-child(4) {
-  min-width: 160px; /* Adjust width as needed */
-  white-space: nowrap; /* Keep it in one line */
-}
+    table th.gender, table td.gender { min-width: 120px; }
+    table th.date,   table td.date   { min-width: 160px; white-space: nowrap; }
 
     .toolbar{display:flex;align-items:center;gap:10px;margin:10px 0}
     .grow{flex:1}
@@ -118,11 +111,11 @@ table td:nth-child(4) {
     </div>
     <div class="sub" style="font-size: 0.85rem; margin-top: 3px;">
       Follow me on Instagram:
-      <a href="https://www.instagram.com/YOUR_INSTAGRAM_USERNAME" 
+      <a href="https://www.instagram.com/menamusicindustry" 
          target="_blank" 
          rel="noopener noreferrer"
          style="color: var(--accent); text-decoration: none;">
-         @YOUR_INSTAGRAM_USERNAME
+         @menamusicindustry
       </a>
     </div>
     <div class="sub" style="font-size: 0.75rem; margin-top: 2px; color: var(--muted);">
@@ -142,14 +135,11 @@ table td:nth-child(4) {
         </div>
       </div>
 
-      <!-- Country with Select All / Clear -->
       <div class="control">
         <label for="country">Artist Country (multi-select)</label>
         <select id="country" multiple size="6" aria-label="Filter by country"></select>
-       
       </div>
 
-      <!-- Gender with Select All / Clear -->
       <div class="control">
         <label for="gender">Gender (multi-select)</label>
         <select id="gender" multiple size="5" aria-label="Filter by gender">
@@ -159,10 +149,8 @@ table td:nth-child(4) {
           <option>Group</option>
           <option>Unknown</option>
         </select>
-      
       </div>
 
-      <!-- Date range -->
       <div class="control date-range">
         <label>Release Date</label>
         <div class="date-inputs">
@@ -171,7 +159,6 @@ table td:nth-child(4) {
         </div>
       </div>
 
-      <!-- Clear filters -->
       <div class="control" style="align-self:flex-end">
         <button id="clear">Clear filters</button>
       </div>
@@ -232,11 +219,7 @@ table td:nth-child(4) {
       next: document.getElementById('next'),
       chartG: document.getElementById('chartGender'),
       chartA: document.getElementById('chartTopArtists'),
-      chartC: document.getElementById('chartTopCountries'),
-      countryAll: document.getElementById('countryAll'),
-      countryClear: document.getElementById('countryClear'),
-      genderAll: document.getElementById('genderAll'),
-      genderClear: document.getElementById('genderClear')
+      chartC: document.getElementById('chartTopCountries')
     };
 
     const PAGE_SIZE = 100;
@@ -248,9 +231,6 @@ table td:nth-child(4) {
 
     // ---------- utils ----------
     const selected = sel => Array.from(sel.selectedOptions).map(o=>o.value);
-    const selectAll = sel => Array.from(sel.options).forEach(o => o.selected = true);
-    const clearAll  = sel => Array.from(sel.options).forEach(o => o.selected = false);
-
     const fmtDate = iso => {
       if (!iso) return 'No date reported';
       const d = new Date(iso); if(isNaN(d)) return 'No date reported';
@@ -273,11 +253,11 @@ table td:nth-child(4) {
 
     // -------- Countries + default date bounds --------
     async function loadFilterOptions(){
-      // Hardcode Arab League countries so they always show
+      // Arab League list with "Palestine"
       const ARAB_COUNTRIES = [
         'Algeria','Bahrain','Comoros','Djibouti','Egypt','Iraq','Jordan','Kuwait',
         'Lebanon','Libya','Mauritania','Morocco','Oman','Qatar','Saudi Arabia',
-        'Somalia','State of Palestine','Sudan','Syria','Tunisia','United Arab Emirates','Yemen'
+        'Somalia','Palestine','Sudan','Syria','Tunisia','United Arab Emirates','Yemen'
       ].sort((a,b)=>a.localeCompare(b));
 
       els.country.innerHTML='';
@@ -480,18 +460,12 @@ table td:nth-child(4) {
     els.start.addEventListener('change', onFilter);
     els.end.addEventListener('change', onFilter);
 
-    // multiselect helpers
-    els.countryAll.addEventListener('click', ()=>{ selectAll(els.country); onFilter(); });
-    els.countryClear.addEventListener('click', ()=>{ clearAll(els.country); onFilter(); });
-    els.genderAll.addEventListener('click', ()=>{ selectAll(els.gender); onFilter(); });
-    els.genderClear.addEventListener('click', ()=>{ clearAll(els.gender); onFilter(); });
-
     // clear filters
     els.clear.addEventListener('click', async ()=>{
       els.q.value = '';
       els.label.value = '';
-      clearAll(els.country);
-      clearAll(els.gender);
+      Array.from(els.country.options).forEach(o=>o.selected=false);
+      Array.from(els.gender.options).forEach(o=>o.selected=false);
       await loadFilterOptions(); // resets date range
       sortBy = 'date'; sortDir = 'desc'; offset = 0;
       loadPage().catch(console.error);
@@ -519,4 +493,3 @@ table td:nth-child(4) {
   </script>
 </body>
 </html>
-
