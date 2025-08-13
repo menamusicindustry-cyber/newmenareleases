@@ -13,13 +13,19 @@
     header{padding:20px;border-bottom:1px solid var(--border);background:linear-gradient(180deg,#141823,#0f1115);position:sticky;top:0;z-index:5}
     h1{margin:0;font-size:1.6rem}
     .sub{margin-top:6px;color:var(--muted)}
-    .controls{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px}
+    .controls{display:grid;gap:10px;margin-top:14px;grid-template-columns: minmax(260px,1fr) repeat(3, minmax(180px, 1fr)) auto;}
+    @media (max-width:1100px){ .controls{grid-template-columns:1fr} }
+
     .control{display:flex;flex-direction:column;gap:6px;min-width:180px}
+    .control-stack{display:flex;flex-direction:column;gap:10px;min-width:260px}
     label{font-size:.85rem;color:var(--muted)}
     input,select,button{padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:var(--panel);color:var(--text);outline:none}
     input:focus,select:focus,button:focus{border-color:var(--accent);box-shadow:0 0 0 3px #6ea8fe22}
     a{color:var(--accent)}
     button{cursor:pointer}
+    .btnrow{display:flex;gap:6px;margin-top:6px}
+    .btnrow button{padding:6px 10px;font-size:.85rem}
+
     main{max-width:1400px;margin:18px auto;padding:0 16px 40px}
 
     /* Two-column layout: left = table, right = charts */
@@ -38,13 +44,17 @@
     th .dir{opacity:.8;margin-left:4px}
     tbody tr:hover{background:#161c27}
 
-    /* Column widths + wrapping for Release Name */
+    /* Column widths + wrapping for long columns */
     th.artist, td.artist   { width: 18%; }
-    th.release, td.release { width: 32%; white-space: normal; overflow: visible; word-break: break-word; overflow-wrap: anywhere; }
+    th.release, td.release { width: 30%; white-space: normal; overflow: visible; word-break: break-word; overflow-wrap: anywhere; }
     th.country, td.country { width: 14%; }
-    th.label, td.label     { width: 18%; }
-    th.gender, td.gender   { width: 8%;  }
-    th.date, td.date       { width: 10%; }
+    th.label, td.label     { width: 16%; white-space: normal; word-break: break-word; }
+    th.gender, td.gender   { width: 10%; }
+    th.date, td.date       { width: 12%; }
+
+    /* Ensure Gender & Date have readable space */
+    table th.gender, table td.gender { min-width: 110px; }
+    table th.date,   table td.date   { min-width: 130px; }
 
     .toolbar{display:flex;align-items:center;gap:10px;margin:10px 0}
     .grow{flex:1}
@@ -113,21 +123,29 @@
     </div>
 
     <div class="controls">
-      <div class="control" style="min-width:220px;flex:1">
-        <label for="q">Search by Artist Name</label>
-        <input id="q" type="text" placeholder="Type an artist name…">
+      <!-- Artist + Label stacked in one column on desktop -->
+      <div class="control-stack">
+        <div class="control">
+          <label for="q">Search by Artist Name</label>
+          <input id="q" type="text" placeholder="Type an artist name…">
+        </div>
+        <div class="control">
+          <label for="label">Label Name</label>
+          <input id="label" type="text" placeholder="Search by label…">
+        </div>
       </div>
 
-      <div class="control" style="min-width:220px;">
-        <label for="label">Label Name</label>
-        <input id="label" type="text" placeholder="Search by label…">
-      </div>
-
+      <!-- Country with Select All / Clear -->
       <div class="control">
         <label for="country">Artist Country (multi-select)</label>
         <select id="country" multiple size="6" aria-label="Filter by country"></select>
+        <div class="btnrow">
+          <button id="countryAll" type="button">Select All</button>
+          <button id="countryClear" type="button">Clear</button>
+        </div>
       </div>
 
+      <!-- Gender with Select All / Clear -->
       <div class="control">
         <label for="gender">Gender (multi-select)</label>
         <select id="gender" multiple size="5" aria-label="Filter by gender">
@@ -137,8 +155,13 @@
           <option>Group</option>
           <option>Unknown</option>
         </select>
+        <div class="btnrow">
+          <button id="genderAll" type="button">Select All</button>
+          <button id="genderClear" type="button">Clear</button>
+        </div>
       </div>
 
+      <!-- Date range -->
       <div class="control date-range">
         <label>Release Date</label>
         <div class="date-inputs">
@@ -147,6 +170,7 @@
         </div>
       </div>
 
+      <!-- Clear filters -->
       <div class="control" style="align-self:flex-end">
         <button id="clear">Clear filters</button>
       </div>
@@ -207,7 +231,11 @@
       next: document.getElementById('next'),
       chartG: document.getElementById('chartGender'),
       chartA: document.getElementById('chartTopArtists'),
-      chartC: document.getElementById('chartTopCountries')
+      chartC: document.getElementById('chartTopCountries'),
+      countryAll: document.getElementById('countryAll'),
+      countryClear: document.getElementById('countryClear'),
+      genderAll: document.getElementById('genderAll'),
+      genderClear: document.getElementById('genderClear')
     };
 
     const PAGE_SIZE = 100;
@@ -219,6 +247,9 @@
 
     // ---------- utils ----------
     const selected = sel => Array.from(sel.selectedOptions).map(o=>o.value);
+    const selectAll = sel => Array.from(sel.options).forEach(o => o.selected = true);
+    const clearAll  = sel => Array.from(sel.options).forEach(o => o.selected = false);
+
     const fmtDate = iso => {
       if (!iso) return 'No date reported';
       const d = new Date(iso); if(isNaN(d)) return 'No date reported';
@@ -448,12 +479,18 @@
     els.start.addEventListener('change', onFilter);
     els.end.addEventListener('change', onFilter);
 
+    // multiselect helpers
+    els.countryAll.addEventListener('click', ()=>{ selectAll(els.country); onFilter(); });
+    els.countryClear.addEventListener('click', ()=>{ clearAll(els.country); onFilter(); });
+    els.genderAll.addEventListener('click', ()=>{ selectAll(els.gender); onFilter(); });
+    els.genderClear.addEventListener('click', ()=>{ clearAll(els.gender); onFilter(); });
+
     // clear filters
     els.clear.addEventListener('click', async ()=>{
       els.q.value = '';
       els.label.value = '';
-      Array.from(els.country.options).forEach(o=>o.selected=false);
-      Array.from(els.gender.options).forEach(o=>o.selected=false);
+      clearAll(els.country);
+      clearAll(els.gender);
       await loadFilterOptions(); // resets date range
       sortBy = 'date'; sortDir = 'desc'; offset = 0;
       loadPage().catch(console.error);
